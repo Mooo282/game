@@ -14,13 +14,13 @@
         .hidden { display: none !important; }
         button { background: #2563eb; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; margin: 5px; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
-        .player-tag { background: #e2e8f0; padding: 5px 10px; border-radius: 20px; margin: 5px; display: inline-flex; align-items: center; font-size: 0.9em; }
+        .player-tag { background: #e2e8f0; padding: 5px 10px; border-radius: 20px; margin: 5px; display: inline-flex; align-items: center; }
         #score-board { background: #1e293b; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
         .score-item { margin: 5px 15px; }
-        input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 80%; margin-bottom: 10px; }
         #leaderboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; color: white; }
         .leaderboard-box { background: white; color: #1e293b; padding: 30px; border-radius: 20px; width: 90%; max-width: 400px; text-align: center; }
         .leader-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+        .vote-tag { font-size: 0.7em; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 5px; margin-top: 5px; color: #1e293b; }
     </style>
 </head>
 <body>
@@ -35,7 +35,7 @@
     <div id="lobby-screen" class="hidden">
         <h2 id="wait-msg">جاري الاتصال...</h2>
         <div id="player-list-box" style="background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #cbd5e1; margin-bottom:20px;">
-            <strong>المتواجدون حالياً:</strong> <div id="online-players" style="margin-top:10px;"></div>
+            <strong>المتواجدون:</strong> <div id="online-players"></div>
         </div>
         <div id="host-zone" class="hidden">
             <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
@@ -67,7 +67,6 @@
     const socket = io();
     let selected = [], currentDrawerId = null, myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
     sessionStorage.setItem('links_id', myUserId);
-    let currentHostId = null;
 
     window.onload = () => {
         const savedName = localStorage.getItem('links_name');
@@ -90,20 +89,16 @@
     });
 
     socket.on('updatePlayerList', data => {
-        currentHostId = data.hostId;
         const listDiv = document.getElementById('online-players');
         listDiv.innerHTML = "";
         const isMeHost = (myUserId === data.hostId);
-        
         data.names.forEach(name => {
             const span = document.createElement('span');
             span.className = "player-tag";
             span.innerText = name;
             if (isMeHost && name !== document.getElementById('nick').value) {
                 const b = document.createElement('button');
-                b.innerText = "❌";
-                b.style.fontSize = "10px";
-                b.style.background = "red";
+                b.innerText = "❌"; b.style.background = "red"; b.style.color = "white";
                 b.onclick = () => { if(confirm(`طرد ${name}؟`)) socket.emit('kickPlayer', name); };
                 span.appendChild(b);
             }
@@ -111,24 +106,9 @@
         });
     });
 
-    socket.on('syncGame', d => {
-        document.getElementById('lobby-screen').classList.add('hidden');
-        document.getElementById('game-screen').classList.remove('hidden');
-        updateScores(d.scores, d.playerNames);
-        currentDrawerId = d.drawerId;
-        if (d.state === "DRAWING") {
-            const isTurn = (myUserId === d.drawerId);
-            document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
-            render(d.words, !isTurn);
-        } else if (d.state === "FAKING") {
-            document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
-            if(myUserId !== d.drawerId) document.getElementById('fake-ctrl').classList.remove('hidden');
-            render(d.words, false);
-        } else if (d.state === "VOTING") {
-            document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
-            if(myUserId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
-            render(d.votingOptions, (myUserId === d.drawerId));
-        }
+    socket.on('statusUpdate', msg => {
+        const s = document.getElementById('status');
+        s.innerText = msg; s.style.background = "#fee2e2";
     });
 
     socket.on('roundStarted', d => {
@@ -138,7 +118,9 @@
         updateScores(d.scores, d.playerNames);
         currentDrawerId = d.drawerId;
         const isTurn = (myUserId === d.drawerId);
-        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر المشفّر...`;
+        selected = [];
+        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر المشفّر يكتب الرابط...`;
+        document.getElementById('status').style.background = "#e2e8f0";
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
@@ -170,7 +152,7 @@
 
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
-        if(myUserId !== d.drawerId) {
+        if(myUserId !== currentDrawerId) {
             document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render(d.allWords, false);
@@ -199,6 +181,7 @@
     }
 
     socket.on('roundFinished', d => {
+        document.getElementById('status').innerText = "انتهت الجولة!";
         render(d.finalOptions, true);
         setTimeout(() => {
             const cards = document.querySelectorAll('.card');
@@ -216,7 +199,7 @@
 
     socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
     socket.on('kicked', () => { alert("تم طردك!"); location.reload(); });
-    socket.on('banned', () => { alert("أنت محظور من هذه الغرفة."); location.href = "about:blank"; });
+    socket.on('banned', () => { alert("أنت محظور."); location.href = "about:blank"; });
     socket.on('gameOver', d => {
         document.getElementById('leaderboard-overlay').classList.remove('hidden');
         const list = document.getElementById('final-list'); list.innerHTML = "";

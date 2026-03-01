@@ -32,7 +32,10 @@ function startTimer(duration, onTimeout) {
     timer = setInterval(() => {
         timeLeft--;
         io.emit('timerUpdate', timeLeft);
-        if (timeLeft <= 0) { clearInterval(timer); if (onTimeout) onTimeout(); }
+        if (timeLeft <= 0) { 
+            clearInterval(timer); 
+            if (onTimeout) onTimeout(); 
+        }
     }, 1000);
 }
 
@@ -40,7 +43,6 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
         if (bannedUsers.has(userId)) return socket.emit('banned');
-
         socketToUserId[socket.id] = userId;
         if (!playerNames[userId]) {
             playerNames[userId] = data.name;
@@ -48,10 +50,8 @@ io.on('connection', (socket) => {
         }
         if (!players.includes(userId)) players.push(userId);
         if (!hostId || !players.includes(hostId)) hostId = players[0];
-
         socket.emit('setRole', { role: (userId === hostId ? 'host' : 'player'), name: playerNames[userId] });
         emitPlayerList();
-
         if (gameState !== "LOBBY") {
             socket.emit('syncGame', {
                 state: gameState, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId],
@@ -87,8 +87,13 @@ io.on('connection', (socket) => {
 
     function startNewRound() {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
-        if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
+        
+        if (drawerQueue.length === 0) {
+            drawerQueue = [...players].sort(() => 0.5 - Math.random());
+        }
         currentDrawerId = drawerQueue.shift();
+
+        // حماية إذا خرج اللاعب
         if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -100,10 +105,12 @@ io.on('connection', (socket) => {
                 currentRound, totalRounds, scores, playerNames, hostId 
             });
         });
+
+        // تعديل: إذا انتهى الوقت ولم يرسل المشفّر، لا تزد الجولة بل اسحب لاعباً آخر
         startTimer(60, () => {
             if (gameState === "DRAWING") {
-                io.emit('statusUpdate', `انتهى وقت المشفّر!`);
-                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { finishGame(); } }, 2000);
+                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! يتم تبديل المشفّر...`);
+                setTimeout(() => startNewRound(), 2000); 
             }
         });
     }
@@ -145,8 +152,12 @@ io.on('connection', (socket) => {
         calculateScores();
         io.emit('roundFinished', { correctWords, scores, names: playerNames, allVotes: votes, finalOptions: votingOptions, hostId });
         setTimeout(() => {
-            if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
-            else { finishGame(); }
+            if (currentRound < totalRounds && players.length > 0) { 
+                currentRound++; 
+                startNewRound(); 
+            } else { 
+                finishGame(); 
+            }
         }, 10000); 
     }
 
@@ -177,4 +188,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => console.log('Server started on 3000'));
+server.listen(3000, () => console.log('Server started'));
