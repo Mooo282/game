@@ -8,7 +8,7 @@
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
         .box { background: white; max-width: 700px; margin: auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; position: relative; min-height: 80px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; min-height: 85px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
         .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; box-shadow: 0 0 15px #22c55e; }
         .card.disabled { opacity: 0.8; cursor: not-allowed; pointer-events: none; }
@@ -16,7 +16,7 @@
         .hidden { display: none; }
         button { background: #2563eb; color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
-        .vote-tag { font-size: 0.7em; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 5px; margin-top: 4px; color: #1e293b; font-weight: normal; }
+        .vote-tag { font-size: 0.7em; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 5px; margin-top: 5px; color: #1e293b; font-weight: normal; }
         #score-board { background: #1e293b; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
         .score-item { margin: 5px 15px; font-size: 0.9em; }
         input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 80%; margin-bottom: 10px; }
@@ -133,7 +133,6 @@
     socket.on('startVoting', d => {
         const isDrawer = (myUserId === d.drawerId);
         document.getElementById('status').innerText = isDrawer ? "أصدقاؤك يصوتون..." : "صوّت للكلمات الأصلية!";
-        // إخفاء زر التصويت تماماً عن المشفّر
         document.getElementById('vote-ctrl').className = isDrawer ? "hidden" : "";
         render(d.options, isDrawer);
         selected = [];
@@ -143,26 +142,33 @@
         if(selected.length !== 2) return alert("صوّت لكرتين!");
         socket.emit('submitVote', selected);
         document.getElementById('vote-ctrl').classList.add('hidden');
-        render([], true);
+        render([], true); // مسح الشبكة مؤقتاً لحين وصول النتائج
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الإجابة بالأخضر.";
-        const cards = document.querySelectorAll('.card');
-        cards.forEach(card => {
-            const word = card.innerText;
-            if(d.correctWords.includes(word)) card.classList.add('correct-answer');
-            
-            // إضافة أسماء من صوتوا بجانب الكلمة للكل
-            for(let uId in d.allVotes) {
-                if(d.allVotes[uId].includes(word)) {
-                    const tag = document.createElement('div');
-                    tag.className = 'vote-tag';
-                    tag.innerText = "🚩 " + d.names[uId];
-                    card.appendChild(tag);
+        document.getElementById('status').innerText = "انتهت الجولة! شاهد النتائج:";
+        
+        // إعادة رسم الشبكة للجميع لضمان ظهور الكروت (خاصة للمصوتين والمشفر)
+        render(d.finalOptions, true);
+
+        // وضع تايم آوت بسيط لضمان رسم العناصر قبل التلوين
+        setTimeout(() => {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                const word = card.innerText;
+                if(d.correctWords.includes(word)) card.classList.add('correct-answer');
+                
+                for(let uId in d.allVotes) {
+                    if(d.allVotes[uId].includes(word)) {
+                        const tag = document.createElement('div');
+                        tag.className = 'vote-tag';
+                        tag.innerText = "🚩 " + d.names[uId];
+                        card.appendChild(tag);
+                    }
                 }
-            }
-        });
+            });
+        }, 50);
+
         updateScores(d.scores, d.names);
     });
 

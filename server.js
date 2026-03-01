@@ -11,7 +11,7 @@ const allWords = ["نسر", "غراب", "بطارية", "سفاح", "ساطور"
 let players = [], scores = {}, playerNames = {}, hostId = null;
 let currentRound = 0, totalRounds = 0, correctWords = [], currentDrawerId = null;
 let fakeWords = {}, votes = {}, guessesReceived = 0, timer, timeLeft = 60;
-let gameState = "LOBBY", currentWords = [], currentClue = "";
+let gameState = "LOBBY", currentWords = [], currentClue = "", votingOptions = [];
 let socketToUserId = {};
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
@@ -38,7 +38,6 @@ io.on('connection', (socket) => {
             scores[userId] = 0;
             if (!players.includes(userId)) players.push(userId);
         }
-        
         if (!hostId || !players.includes(hostId)) hostId = players[0];
 
         socket.emit('setRole', { 
@@ -94,14 +93,13 @@ io.on('connection', (socket) => {
         gameState = "VOTING"; clearInterval(timer); guessesReceived = 0;
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
-        let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
+        votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
         io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
         startTimer(45, () => finalizeRound());
     }
 
     socket.on('submitVote', (votedWords) => {
         const uId = socketToUserId[socket.id];
-        // منع صاحب الدور من التصويت برمجياً
         if (uId === currentDrawerId || votes[uId]) return;
         votes[uId] = votedWords;
         guessesReceived++;
@@ -111,12 +109,12 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
-        // إرسال النتائج للجميع (تأكد من وجود مصفوفة التصويتات)
         io.emit('roundFinished', { 
             correctWords, 
             scores, 
             names: playerNames,
-            allVotes: votes 
+            allVotes: votes,
+            finalOptions: votingOptions 
         });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
@@ -142,11 +140,10 @@ io.on('connection', (socket) => {
         delete socketToUserId[socket.id];
         if (uId === hostId && players.length > 0) {
             hostId = players[0];
-            io.emit('updatePlayerList', players.map(id => playerNames[id]));
-            // إبلاغ المضيف الجديد
             const sid = Object.keys(socketToUserId).find(k => socketToUserId[k] === hostId);
             if(sid) io.to(sid).emit('setRole', { role: 'host', name: playerNames[hostId] });
         }
+        io.emit('updatePlayerList', players.map(id => playerNames[id]));
     });
 });
 
