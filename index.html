@@ -67,7 +67,6 @@
         const isHost = (d.role === 'host');
         document.getElementById('wait-msg').innerText = isHost ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف.`;
         if(isHost) document.getElementById('host-zone').classList.remove('hidden');
-        else document.getElementById('host-zone').classList.add('hidden');
     });
 
     socket.on('updatePlayerList', names => document.getElementById('online-players').innerText = names.join(" - "));
@@ -79,12 +78,12 @@
         updateScores(d.scores, d.playerNames);
         const isTurn = myUserId === d.drawerId;
         selected = [];
-        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName}...`;
+        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
         document.getElementById('clue-display').innerText = "";
-        render(d.words, false);
+        render(d.words, !isTurn);
     });
 
     function render(words, disable) {
@@ -113,18 +112,18 @@
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `الرابط من ${d.drawerName}: ${d.clue}`;
         if(myUserId !== d.drawerId) {
-            document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
+            document.getElementById('status').innerText = "تضليل! اختر كلمتين من الشبكة.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
-            render([...document.querySelectorAll('.card')].map(c => c.innerText), false);
+            render(d.allWords, false);
         } else {
             document.getElementById('status').innerText = "انتظر تضليلاتهم...";
-            render([...document.querySelectorAll('.card')].map(c => c.innerText), true);
+            render(d.allWords, true);
         }
         selected = [];
     });
 
     function sendFake() {
-        if(selected.length !== 2) return alert("اختر 2!");
+        if(selected.length !== 2) return alert("اختر 2 لتضليل الآخرين!");
         socket.emit('submitFake', selected);
         document.getElementById('fake-ctrl').classList.add('hidden');
         render([], true);
@@ -132,15 +131,9 @@
 
     socket.on('startVoting', d => {
         const isDrawer = (myUserId === d.drawerId);
-        if(isDrawer) {
-            document.getElementById('status').innerText = "أصدقاؤك يصوتون الآن.. انتظر النتيجة!";
-            document.getElementById('vote-ctrl').classList.add('hidden');
-            render(d.options, true);
-        } else {
-            document.getElementById('status').innerText = "صوّت الآن للكلمات الأصلية!";
-            document.getElementById('vote-ctrl').classList.remove('hidden');
-            render(d.options, false);
-        }
+        document.getElementById('status').innerText = isDrawer ? "أصدقاؤك يصوتون..." : "صوّت الآن للكلمات الأصلية!";
+        if(!isDrawer) document.getElementById('vote-ctrl').classList.remove('hidden');
+        render(d.options, isDrawer);
         selected = [];
     });
 
@@ -152,21 +145,23 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الإجابة: " + d.correctWords.join(" و ");
-        document.getElementById('status').style.color = "#22c55e";
-        document.querySelectorAll('.card').forEach(c => {
-            if(d.correctWords.includes(c.innerText)) {
-                c.classList.add('correct-answer');
-                c.style.background = "#22c55e";
-            }
-        });
+        document.getElementById('status').innerText = "انتهت الجولة! الإجابة بالأخضر.";
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => { if(d.correctWords.includes(card.innerText)) card.classList.add('correct-answer'); });
         updateScores(d.scores, d.names);
     });
 
-    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
-    socket.on('timerUpdate', t => document.getElementById('timer').innerText = t);
-    socket.on('gameOver', d => { alert("انتهت اللعبة!"); location.reload(); });
-    socket.on('waiting', () => document.getElementById('status').innerText = "تم الاستلام.. بانتظار البقية ⌛");
+    socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
+    
+    socket.on('gameOver', d => {
+        alert("انتهت اللعبة!");
+        location.reload();
+    });
+
+    function startGame() {
+        const r = document.getElementById('rounds-count').value;
+        socket.emit('requestStart', { rounds: r });
+    }
 </script>
 </body>
 </html>
