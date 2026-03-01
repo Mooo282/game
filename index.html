@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗 نسخة الجلسات</title>
+    <title>لعبة الروابط 🔗</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
@@ -18,6 +18,7 @@
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
         #score-board { background: #1e293b; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
         .score-item { margin: 5px 15px; font-size: 0.9em; }
+        #player-list-box { background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 20px; }
         input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 75%; margin-bottom: 10px; font-size: 1em; }
     </style>
 </head>
@@ -25,28 +26,41 @@
 <div class="box">
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اسمك المستعار...">
+        <input type="text" id="nick" placeholder="اكتب اسمك المستعار...">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
+
     <div id="lobby-screen" class="hidden">
-        <h2 id="wait-msg">جاري الاتصال...</h2>
+        <h2 id="wait-msg">جاري الانتظار...</h2>
+        <div id="player-list-box">
+            <strong>اللاعبون المتصلون:</strong>
+            <div id="online-players" style="margin-top:10px; color:#2563eb; font-weight:bold;"></div>
+        </div>
         <div id="host-zone" class="hidden">
-            <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
+            <select id="rounds-count">
+                <option value="5">5 جولات</option>
+                <option value="10">10 جولات</option>
+            </select>
             <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
         </div>
     </div>
+
     <div id="game-screen" class="hidden">
         <div id="score-board"><div id="s-list"></div></div>
-        <div id="round-info" style="color:#64748b; font-weight:bold;"></div>
+        <div id="round-info" style="color:#64748b; font-weight:bold; margin-bottom:5px;"></div>
         <div id="timer">60</div>
         <div id="status">جاري التحميل...</div>
         <div id="clue-display" style="font-size:1.8em; color:#ea580c; font-weight:800; margin:10px 0;"></div>
         <div class="grid" id="grid"></div>
-        <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط..."><br><button onclick="sendClue()">إرسال</button></div>
+        <div id="draw-ctrl" class="hidden">
+            <input type="text" id="clue-in" placeholder="اكتب الرابط...">
+            <br><button onclick="sendClue()">إرسال الرابط</button>
+        </div>
         <div id="fake-ctrl" class="hidden"><button onclick="sendFake()">إرسال التضليل</button></div>
         <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تصويت للأصلية</button></div>
     </div>
 </div>
+
 <script>
     const socket = io();
     let selected = [], myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
@@ -59,6 +73,10 @@
         document.getElementById('name-screen').classList.add('hidden');
         document.getElementById('lobby-screen').classList.remove('hidden');
     }
+
+    socket.on('updatePlayerList', (names) => {
+        document.getElementById('online-players').innerText = names.join(" - ");
+    });
 
     socket.on('setRole', d => {
         document.getElementById('wait-msg').innerText = d.role === 'host' ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف.`;
@@ -122,7 +140,7 @@
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render([...document.querySelectorAll('.card')].map(c => c.innerText), false);
         } else {
-            document.getElementById('status').innerText = "انتظرهم...";
+            document.getElementById('status').innerText = "انتظر تضليلاتهم...";
             render([...document.querySelectorAll('.card')].map(c => c.innerText), true);
         }
         selected = [];
@@ -136,7 +154,6 @@
     }
 
     socket.on('startVoting', d => {
-        const isDrawer = myUserId === sessionStorage.getItem('links_id'); // تبسيط
         document.getElementById('status').innerText = "صوّت للأصلية!";
         document.getElementById('vote-ctrl').classList.remove('hidden');
         render(d.options, false);
@@ -151,7 +168,7 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الكلمات بالأخضر ✅ الإجابة: " + d.correctWords.join(" و ");
+        document.getElementById('status').innerText = "انتهت الجولة! الإجابة: " + d.correctWords.join(" و ");
         document.querySelectorAll('.card').forEach(c => { if(d.correctWords.includes(c.innerText)) c.classList.add('correct'); });
         updateScores(d.scores, d.names);
     });
