@@ -39,15 +39,15 @@ io.on('connection', (socket) => {
             if (!players.includes(userId)) players.push(userId);
         }
 
-        if (!hostId || !players.includes(hostId)) hostId = userId;
-        
+        // المضيف هو دائماً أول شخص في مصفوفة اللاعبين
+        if (players.length > 0) hostId = players[0];
+
         socket.emit('setRole', { 
             role: (userId === hostId ? 'host' : 'player'), 
             name: playerNames[userId],
             userId: userId
         });
 
-        // إرسال قائمة اللاعبين المتصلين للجميع
         const onlineNames = players.map(id => playerNames[id]);
         io.emit('updatePlayerList', onlineNames);
 
@@ -62,7 +62,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('requestStart', (data) => {
-        if (socketToUserId[socket.id] === hostId) {
+        const uId = socketToUserId[socket.id];
+        if (uId === hostId && gameState === "LOBBY") {
             totalRounds = parseInt(data.rounds) || 5;
             currentRound = 1;
             startNewRound();
@@ -124,11 +125,11 @@ io.on('connection', (socket) => {
     function calculateScores() {
         for (let vId in votes) {
             if (vId === currentDrawerId) continue;
-            if (votes[vId].every(w => correctWords.includes(w))) {
+            if (votes[vId] && votes[vId].every(w => correctWords.includes(w))) {
                 scores[vId] += 10; scores[currentDrawerId] += 5;
             } else {
                 for (let fId in fakeWords) {
-                    if (votes[vId].every(w => fakeWords[fId].includes(w))) scores[fId] += 7;
+                    if (votes[vId] && votes[vId].every(w => fakeWords[fId].includes(w))) scores[fId] += 7;
                 }
             }
         }
@@ -136,7 +137,6 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         delete socketToUserId[socket.id];
-        // لا نحذف البيانات من القوائم للسماح بالعودة عبر sessionStorage
     });
 });
 

@@ -26,7 +26,7 @@
 <div class="box">
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك المستعار...">
+        <input type="text" id="nick" placeholder="اسمك المستعار...">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
 
@@ -37,10 +37,7 @@
             <div id="online-players" style="margin-top:10px; color:#2563eb; font-weight:bold;"></div>
         </div>
         <div id="host-zone" class="hidden">
-            <select id="rounds-count">
-                <option value="5">5 جولات</option>
-                <option value="10">10 جولات</option>
-            </select>
+            <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
             <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
         </div>
     </div>
@@ -52,10 +49,7 @@
         <div id="status">جاري التحميل...</div>
         <div id="clue-display" style="font-size:1.8em; color:#ea580c; font-weight:800; margin:10px 0;"></div>
         <div class="grid" id="grid"></div>
-        <div id="draw-ctrl" class="hidden">
-            <input type="text" id="clue-in" placeholder="اكتب الرابط...">
-            <br><button onclick="sendClue()">إرسال الرابط</button>
-        </div>
+        <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط..."><br><button onclick="sendClue()">إرسال</button></div>
         <div id="fake-ctrl" class="hidden"><button onclick="sendFake()">إرسال التضليل</button></div>
         <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تصويت للأصلية</button></div>
     </div>
@@ -74,13 +68,20 @@
         document.getElementById('lobby-screen').classList.remove('hidden');
     }
 
-    socket.on('updatePlayerList', (names) => {
-        document.getElementById('online-players').innerText = names.join(" - ");
+    socket.on('setRole', d => {
+        const isHost = (d.role === 'host');
+        document.getElementById('wait-msg').innerText = isHost ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف ليبدأ.`;
+        
+        // تأكيد إظهار أو إخفاء زر البدء بناءً على الدور الحقيقي
+        if(isHost) {
+            document.getElementById('host-zone').classList.remove('hidden');
+        } else {
+            document.getElementById('host-zone').classList.add('hidden');
+        }
     });
 
-    socket.on('setRole', d => {
-        document.getElementById('wait-msg').innerText = d.role === 'host' ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف.`;
-        if(d.role === 'host') document.getElementById('host-zone').classList.remove('hidden');
+    socket.on('updatePlayerList', (names) => {
+        document.getElementById('online-players').innerText = names.join(" - ");
     });
 
     socket.on('syncGame', d => {
@@ -154,8 +155,9 @@
     }
 
     socket.on('startVoting', d => {
+        const isDrawer = myUserId === sessionStorage.getItem('links_id'); // مبسطة
         document.getElementById('status').innerText = "صوّت للأصلية!";
-        document.getElementById('vote-ctrl').classList.remove('hidden');
+        if(myUserId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
         render(d.options, false);
         selected = [];
     });
@@ -168,7 +170,7 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الإجابة: " + d.correctWords.join(" و ");
+        document.getElementById('status').innerText = "انتهت الجولة! الكلمات بالأخضر ✅";
         document.querySelectorAll('.card').forEach(c => { if(d.correctWords.includes(c.innerText)) c.classList.add('correct'); });
         updateScores(d.scores, d.names);
     });
