@@ -5,14 +5,14 @@
     <title>لعبة الروابط 🔗</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
         .box { background: white; max-width: 700px; margin: auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
         .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; min-height: 85px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
-        .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; box-shadow: 0 0 15px #22c55e; }
+        .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; }
         .card.disabled { opacity: 0.8; cursor: not-allowed; pointer-events: none; }
-        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; }
+        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; transition: 0.3s; }
         .hidden { display: none; }
         button { background: #2563eb; color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
@@ -72,6 +72,11 @@
 
     socket.on('updatePlayerList', names => document.getElementById('online-players').innerText = names.join(" - "));
 
+    socket.on('statusUpdate', msg => {
+        const s = document.getElementById('status');
+        s.innerText = msg; s.style.background = "#fee2e2";
+    });
+
     socket.on('roundStarted', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
@@ -80,6 +85,7 @@
         const isTurn = myUserId === d.drawerId;
         selected = [];
         document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
+        document.getElementById('status').style.background = "#e2e8f0";
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
@@ -142,33 +148,25 @@
         if(selected.length !== 2) return alert("صوّت لكرتين!");
         socket.emit('submitVote', selected);
         document.getElementById('vote-ctrl').classList.add('hidden');
-        render([], true); // مسح الشبكة مؤقتاً لحين وصول النتائج
+        render([], true);
     }
 
     socket.on('roundFinished', d => {
         document.getElementById('status').innerText = "انتهت الجولة! شاهد النتائج:";
-        
-        // إعادة رسم الشبكة للجميع لضمان ظهور الكروت (خاصة للمصوتين والمشفر)
         render(d.finalOptions, true);
-
-        // وضع تايم آوت بسيط لضمان رسم العناصر قبل التلوين
         setTimeout(() => {
             const cards = document.querySelectorAll('.card');
             cards.forEach(card => {
                 const word = card.innerText;
                 if(d.correctWords.includes(word)) card.classList.add('correct-answer');
-                
                 for(let uId in d.allVotes) {
                     if(d.allVotes[uId].includes(word)) {
-                        const tag = document.createElement('div');
-                        tag.className = 'vote-tag';
-                        tag.innerText = "🚩 " + d.names[uId];
-                        card.appendChild(tag);
+                        const tag = document.createElement('div'); tag.className = 'vote-tag';
+                        tag.innerText = "🚩 " + d.names[uId]; card.appendChild(tag);
                     }
                 }
             });
         }, 50);
-
         updateScores(d.scores, d.names);
     });
 

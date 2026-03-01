@@ -13,17 +13,21 @@ let currentRound = 0, totalRounds = 0, correctWords = [], currentDrawerId = null
 let fakeWords = {}, votes = {}, guessesReceived = 0, timer, timeLeft = 60;
 let gameState = "LOBBY", currentWords = [], currentClue = "", votingOptions = [];
 let socketToUserId = {};
+let drawerQueue = [];
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
-function startTimer(duration, callback) {
+function startTimer(duration, onTimeout) {
     clearInterval(timer);
     timeLeft = duration;
     io.emit('timerUpdate', timeLeft);
     timer = setInterval(() => {
         timeLeft--;
         io.emit('timerUpdate', timeLeft);
-        if (timeLeft <= 0) { clearInterval(timer); callback(); }
+        if (timeLeft <= 0) {
+            clearInterval(timer);
+            if (onTimeout) onTimeout();
+        }
     }, 1000);
 }
 
@@ -32,24 +36,20 @@ io.on('connection', (socket) => {
         const userId = data.userId;
         const name = data.name;
         socketToUserId[socket.id] = userId;
-
         if (!playerNames[userId]) {
             playerNames[userId] = name;
             scores[userId] = 0;
             if (!players.includes(userId)) players.push(userId);
         }
         if (!hostId || !players.includes(hostId)) hostId = players[0];
-
-        socket.emit('setRole', { 
-            role: (userId === hostId ? 'host' : 'player'), 
-            name: playerNames[userId]
-        });
+        socket.emit('setRole', { role: (userId === hostId ? 'host' : 'player'), name: playerNames[userId] });
         io.emit('updatePlayerList', players.map(id => playerNames[id]));
     });
 
     socket.on('requestStart', (data) => {
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
-            players.forEach(id => scores[id] = 0); 
+            players.forEach(id => scores[id] = 0);
+            drawerQueue = [];
             totalRounds = parseInt(data.rounds) || 5;
             currentRound = 1;
             startNewRound();
@@ -58,9 +58,12 @@ io.on('connection', (socket) => {
 
     function startNewRound() {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
-        currentDrawerId = players[Math.floor(Math.random() * players.length)];
-        currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
+        if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
+        currentDrawerId = drawerQueue.shift();
         
+        if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
+
+        currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
         players.forEach(pId => {
             const sid = Object.keys(socketToUserId).find(k => socketToUserId[k] === pId);
             if (sid) {
@@ -71,11 +74,17 @@ io.on('connection', (socket) => {
                 });
             }
         });
-        startTimer(60, () => {});
+
+        startTimer(60, () => {
+            if (gameState === "DRAWING") {
+                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! يتم تخطي الدور...`);
+                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { gameState = "LOBBY"; io.emit('gameOver'); } }, 3000);
+            }
+        });
     }
 
     socket.on('submitClue', (data) => {
-        if (socketToUserId[socket.id] !== currentDrawerId) return;
+        if (socketToUserId[socket.id] !== currentDrawerId || gameState !== "DRAWING") return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
         io.emit('showClue', { clue: currentClue, drawerName: playerNames[currentDrawerId], allWords: currentWords });
         startTimer(60, () => proceedToVoting());
@@ -83,7 +92,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitFake', (words) => {
         const uId = socketToUserId[socket.id];
-        if (uId === currentDrawerId || fakeWords[uId]) return;
+        if (uId === currentDrawerId || fakeWords[uId] || gameState !== "FAKING") return;
         fakeWords[uId] = words;
         guessesReceived++;
         if (guessesReceived >= (players.length - 1)) proceedToVoting();
@@ -100,7 +109,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitVote', (votedWords) => {
         const uId = socketToUserId[socket.id];
-        if (uId === currentDrawerId || votes[uId]) return;
+        if (uId === currentDrawerId || votes[uId] || gameState !== "VOTING") return;
         votes[uId] = votedWords;
         guessesReceived++;
         if (guessesReceived >= (players.length - 1)) finalizeRound();
@@ -109,13 +118,7 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
-        io.emit('roundFinished', { 
-            correctWords, 
-            scores, 
-            names: playerNames,
-            allVotes: votes,
-            finalOptions: votingOptions 
-        });
+        io.emit('roundFinished', { correctWords, scores, names: playerNames, allVotes: votes, finalOptions: votingOptions });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
             else { gameState = "LOBBY"; io.emit('gameOver'); }
@@ -137,6 +140,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         players = players.filter(id => id !== uId);
+        drawerQueue = drawerQueue.filter(id => id !== uId);
         delete socketToUserId[socket.id];
         if (uId === hostId && players.length > 0) {
             hostId = players[0];
@@ -148,4 +152,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server: http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
