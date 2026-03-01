@@ -2,17 +2,18 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗</title>
+    <title>لعبة الروابط 🔗 الإصدار النهائي</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
         .box { background: white; max-width: 650px; margin: auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; }
+        .card { padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.3s; font-size: 1.1em; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
-        .card.correct { background: #22c55e !important; color: white !important; }
+        /* تصميم الإجابة الصحيحة لجميع الأجهزة */
+        .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; box-shadow: 0 0 15px #22c55e; }
         .card.disabled { opacity: 0.7; cursor: not-allowed; pointer-events: none; }
-        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.2em; background: #e2e8f0; padding: 12px; border-radius: 10px; }
+        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.2em; background: #e2e8f0; padding: 12px; border-radius: 10px; min-height: 1.5em; }
         .hidden { display: none; }
         button { background: #2563eb; color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
@@ -31,10 +32,9 @@
     </div>
 
     <div id="lobby-screen" class="hidden">
-        <h2 id="wait-msg">جاري الانتظار...</h2>
+        <h2 id="wait-msg">جاري الاتصال...</h2>
         <div id="player-list-box">
-            <strong>اللاعبون المتصلون:</strong>
-            <div id="online-players" style="margin-top:10px; color:#2563eb; font-weight:bold;"></div>
+            <strong>المتواجدون:</strong> <div id="online-players" style="margin-top:10px; color:#2563eb; font-weight:bold;"></div>
         </div>
         <div id="host-zone" class="hidden">
             <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
@@ -44,14 +44,14 @@
 
     <div id="game-screen" class="hidden">
         <div id="score-board"><div id="s-list"></div></div>
-        <div id="round-info" style="color:#64748b; font-weight:bold; margin-bottom:5px;"></div>
+        <div id="round-info" style="color:#64748b; font-weight:bold;"></div>
         <div id="timer">60</div>
         <div id="status">جاري التحميل...</div>
         <div id="clue-display" style="font-size:1.8em; color:#ea580c; font-weight:800; margin:10px 0;"></div>
         <div class="grid" id="grid"></div>
         <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط..."><br><button onclick="sendClue()">إرسال</button></div>
         <div id="fake-ctrl" class="hidden"><button onclick="sendFake()">إرسال التضليل</button></div>
-        <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تصويت للأصلية</button></div>
+        <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تصويت</button></div>
     </div>
 </div>
 
@@ -70,19 +70,12 @@
 
     socket.on('setRole', d => {
         const isHost = (d.role === 'host');
-        document.getElementById('wait-msg').innerText = isHost ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف ليبدأ.`;
-        
-        // تأكيد إظهار أو إخفاء زر البدء بناءً على الدور الحقيقي
-        if(isHost) {
-            document.getElementById('host-zone').classList.remove('hidden');
-        } else {
-            document.getElementById('host-zone').classList.add('hidden');
-        }
+        document.getElementById('wait-msg').innerText = isHost ? `أهلاً ${d.name}! أنت المضيف.` : `أهلاً ${d.name}! انتظر المضيف.`;
+        if(isHost) document.getElementById('host-zone').classList.remove('hidden');
+        else document.getElementById('host-zone').classList.add('hidden');
     });
 
-    socket.on('updatePlayerList', (names) => {
-        document.getElementById('online-players').innerText = names.join(" - ");
-    });
+    socket.on('updatePlayerList', (names) => { document.getElementById('online-players').innerText = names.join(" - "); });
 
     socket.on('syncGame', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
@@ -90,7 +83,7 @@
         document.getElementById('round-info').innerText = `الجولة ${d.round} من ${d.total}`;
         updateScores(d.scores, d.playerNames);
         document.getElementById('clue-display').innerText = d.clue ? `الرابط من ${d.drawerName}: ${d.clue}` : "";
-        render(d.words, (myUserId === d.drawerId));
+        render(d.words, true);
     });
 
     function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
@@ -104,6 +97,7 @@
         const isTurn = myUserId === d.drawerId;
         selected = [];
         document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName}...`;
+        document.getElementById('status').style.color = "#1e293b";
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
@@ -116,7 +110,10 @@
         words.forEach(w => {
             const div = document.createElement('div'); div.className = 'card' + (disable ? ' disabled' : '');
             div.innerText = w;
-            div.onclick = () => { if(!disable) { div.classList.toggle('selected'); selected = [...document.querySelectorAll('.selected')].map(e => e.innerText); } };
+            div.onclick = () => { if(!disable) { 
+                div.classList.toggle('selected'); 
+                selected = [...document.querySelectorAll('.selected')].map(e => e.innerText);
+            }};
             g.appendChild(div);
         });
     }
@@ -137,7 +134,7 @@
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `الرابط من ${d.drawerName}: ${d.clue}`;
         if(myUserId !== d.drawerId) {
-            document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
+            document.getElementById('status').innerText = "مرحلة التضليل! خدع البقية.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render([...document.querySelectorAll('.card')].map(c => c.innerText), false);
         } else {
@@ -155,10 +152,13 @@
     }
 
     socket.on('startVoting', d => {
-        const isDrawer = myUserId === sessionStorage.getItem('links_id'); // مبسطة
         document.getElementById('status').innerText = "صوّت للأصلية!";
-        if(myUserId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
-        render(d.options, false);
+        const isDrawer = document.getElementById('draw-ctrl').className === ""; // فحص بسيط
+        if(document.getElementById('status').innerText.includes("انتظر")) render(d.options, true);
+        else {
+            document.getElementById('vote-ctrl').classList.remove('hidden');
+            render(d.options, false);
+        }
         selected = [];
     });
 
@@ -170,8 +170,17 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الكلمات بالأخضر ✅";
-        document.querySelectorAll('.card').forEach(c => { if(d.correctWords.includes(c.innerText)) c.classList.add('correct'); });
+        document.getElementById('status').innerText = "انتهت الجولة! الكلمات الأصلية بالأخضر ✅";
+        document.getElementById('status').style.color = "#22c55e";
+        
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(c => {
+            c.classList.add('disabled');
+            if (d.correctWords.includes(c.innerText)) {
+                c.classList.add('correct-answer'); // تطبيق الكلاس الأخضر
+                c.style.background = "#22c55e"; // تأكيد اللون يدوياً
+            }
+        });
         updateScores(d.scores, d.names);
     });
 
