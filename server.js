@@ -14,6 +14,7 @@ let fakeWords = {}, votes = {}, guessesReceived = 0, timer, timeLeft = 60;
 let gameState = "LOBBY", currentWords = [], currentClue = "", votingOptions = [];
 let socketToUserId = {};
 let drawerQueue = [];
+let bannedUsers = new Set(); // قائمة الحظر
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
@@ -24,10 +25,7 @@ function startTimer(duration, onTimeout) {
     timer = setInterval(() => {
         timeLeft--;
         io.emit('timerUpdate', timeLeft);
-        if (timeLeft <= 0) {
-            clearInterval(timer);
-            if (onTimeout) onTimeout();
-        }
+        if (timeLeft <= 0) { clearInterval(timer); if (onTimeout) onTimeout(); }
     }, 1000);
 }
 
@@ -35,15 +33,18 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
         const name = data.name;
-        socketToUserId[socket.id] = userId;
 
-        // استعادة الجلسة أو إنشاء لاعب جديد
+        // منع المطرودين من العودة
+        if (bannedUsers.has(userId)) {
+            return socket.emit('banned');
+        }
+
+        socketToUserId[socket.id] = userId;
         if (!playerNames[userId]) {
             playerNames[userId] = name;
             scores[userId] = 0;
         }
         if (!players.includes(userId)) players.push(userId);
-        
         if (!hostId || !players.includes(hostId)) hostId = players[0];
 
         socket.emit('setRole', { 
@@ -51,32 +52,33 @@ io.on('connection', (socket) => {
             name: playerNames[userId]
         });
         
-        io.emit('updatePlayerList', players.map(id => playerNames[id]));
+        io.emit('updatePlayerList', {
+            names: players.map(id => playerNames[id]),
+            hostId: hostId
+        });
 
-        // مزامنة اللاعب العائد مع حالة اللعبة الحالية
         if (gameState !== "LOBBY") {
             socket.emit('syncGame', {
-                state: gameState,
-                drawerId: currentDrawerId,
-                drawerName: playerNames[currentDrawerId],
-                clue: currentClue,
-                round: currentRound,
-                total: totalRounds,
-                scores,
-                playerNames,
-                words: (userId === currentDrawerId ? currentWords : (gameState === "FAKING" ? currentWords : [])),
-                votingOptions: votingOptions
+                state: gameState, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId],
+                clue: currentClue, round: currentRound, total: totalRounds,
+                scores, playerNames, words: (userId === currentDrawerId ? currentWords : (gameState === "FAKING" ? currentWords : [])),
+                votingOptions
             });
         }
     });
 
     socket.on('kickPlayer', (targetName) => {
-        if (socketToUserId[socket.id] === hostId) {
+        const myUserId = socketToUserId[socket.id];
+        if (myUserId === hostId) {
             const targetUserId = Object.keys(playerNames).find(id => playerNames[id] === targetName);
-            const targetSid = Object.keys(socketToUserId).find(sid => socketToUserId[sid] === targetUserId);
-            if (targetSid) {
-                io.to(targetSid).emit('kicked');
-                if(io.sockets.sockets.get(targetSid)) io.sockets.sockets.get(targetSid).disconnect();
+            if (targetUserId) {
+                bannedUsers.add(targetUserId); // إضافة للقائمة السوداء
+                const targetSid = Object.keys(socketToUserId).find(sid => socketToUserId[sid] === targetUserId);
+                if (targetSid) {
+                    io.to(targetSid).emit('kicked');
+                    const s = io.sockets.sockets.get(targetSid);
+                    if(s) s.disconnect();
+                }
             }
         }
     });
@@ -95,7 +97,6 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
-        
         if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -105,15 +106,15 @@ io.on('connection', (socket) => {
                 io.to(sid).emit('roundStarted', { 
                     words: (pId === currentDrawerId ? currentWords : []), 
                     drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId],
-                    currentRound, totalRounds, scores, playerNames 
+                    currentRound, totalRounds, scores, playerNames, hostId
                 });
             }
         });
 
         startTimer(60, () => {
             if (gameState === "DRAWING") {
-                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! تخطي الدور...`);
-                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { finishGame(); } }, 3000);
+                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}!`);
+                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { finishGame(); } }, 2000);
             }
         });
     }
@@ -121,12 +122,13 @@ io.on('connection', (socket) => {
     socket.on('submitClue', (data) => {
         if (socketToUserId[socket.id] !== currentDrawerId || gameState !== "DRAWING") return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
-        io.emit('showClue', { clue: currentClue, drawerName: playerNames[currentDrawerId], allWords: currentWords });
+        io.emit('showClue', { clue: currentClue, drawerName: playerNames[currentDrawerId], allWords: currentWords, hostId });
         startTimer(60, () => proceedToVoting());
     });
 
     socket.on('submitFake', (words) => {
         const uId = socketToUserId[socket.id];
+        // منع المشفّر من التضليل برمجياً
         if (uId === currentDrawerId || fakeWords[uId] || gameState !== "FAKING") return;
         fakeWords[uId] = words;
         guessesReceived++;
@@ -138,7 +140,7 @@ io.on('connection', (socket) => {
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
-        io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
+        io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId, hostId });
         startTimer(45, () => finalizeRound());
     }
 
@@ -153,7 +155,7 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
-        io.emit('roundFinished', { correctWords, scores, names: playerNames, allVotes: votes, finalOptions: votingOptions });
+        io.emit('roundFinished', { correctWords, scores, names: playerNames, allVotes: votes, finalOptions: votingOptions, hostId });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
             else { finishGame(); }
@@ -182,13 +184,9 @@ io.on('connection', (socket) => {
         const uId = socketToUserId[socket.id];
         players = players.filter(id => id !== uId);
         delete socketToUserId[socket.id];
-        if (uId === hostId && players.length > 0) {
-            hostId = players[0];
-            const sid = Object.keys(socketToUserId).find(k => socketToUserId[k] === hostId);
-            if(sid) io.to(sid).emit('setRole', { role: 'host', name: playerNames[hostId] });
-        }
-        io.emit('updatePlayerList', players.map(id => playerNames[id]));
+        if (uId === hostId && players.length > 0) hostId = players[0];
+        io.emit('updatePlayerList', { names: players.map(id => playerNames[id]), hostId });
     });
 });
 
-server.listen(3000, () => console.log('Server running on 3000'));
+server.listen(3000, () => console.log('Server started on 3000'));

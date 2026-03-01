@@ -5,14 +5,14 @@
     <title>لعبة الروابط 🔗</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; text-align: center; padding: 10px; margin: 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; margin: 0; }
         .box { background: white; max-width: 700px; margin: 20px auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; min-height: 85px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
+        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; min-height: 85px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
         .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; }
         .card.disabled { opacity: 0.8; cursor: not-allowed; pointer-events: none; }
-        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; transition: 0.3s; }
+        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; }
         .hidden { display: none !important; }
         button { background: #2563eb; color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
@@ -62,18 +62,24 @@
     <div class="leaderboard-box">
         <span style="font-size:2em; color:#2563eb; display:block; margin-bottom:20px;">🏆 النتائج النهائية</span>
         <div id="final-list"></div>
-        <br><button onclick="location.reload()" style="width:100%">لعبة جديدة 🔄</button>
+        <br><button onclick="clearAndReload()" style="width:100%">لعبة جديدة 🔄</button>
     </div>
 </div>
 
 <script>
     const socket = io();
-    let selected = [], myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
+    let selected = [], currentDrawerId = null, myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
     sessionStorage.setItem('links_id', myUserId);
 
     window.onload = () => {
         const savedName = localStorage.getItem('links_name');
         if (savedName) { document.getElementById('nick').value = savedName; join(); }
+    }
+
+    function clearAndReload() {
+        sessionStorage.removeItem('links_id');
+        localStorage.removeItem('links_name');
+        location.reload();
     }
 
     function join() {
@@ -91,11 +97,11 @@
         document.getElementById('host-zone').className = isHost ? "" : "hidden";
     });
 
-    socket.on('updatePlayerList', names => {
+    socket.on('updatePlayerList', data => {
         const listDiv = document.getElementById('online-players');
         listDiv.innerHTML = "";
-        const isHost = !document.getElementById('host-zone').classList.contains('hidden');
-        names.forEach(name => {
+        const isHost = (myUserId === data.hostId);
+        data.names.forEach(name => {
             const span = document.createElement('span'); span.style.margin = "0 10px"; span.innerText = name;
             if (isHost && name !== document.getElementById('nick').value) {
                 const b = document.createElement('button'); b.innerText = "❌"; b.style.padding = "2px 5px"; b.style.marginLeft = "5px"; b.style.background = "#ef4444";
@@ -110,9 +116,9 @@
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         updateScores(d.scores, d.playerNames);
+        currentDrawerId = d.drawerId;
         if (d.state === "DRAWING") {
             const isTurn = (myUserId === d.drawerId);
-            document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
             document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
             render(d.words, !isTurn);
         } else if (d.state === "FAKING") {
@@ -131,15 +137,15 @@
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         updateScores(d.scores, d.playerNames);
-        selected = [];
+        currentDrawerId = d.drawerId;
         const isTurn = (myUserId === d.drawerId);
-        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
-        document.getElementById('status').style.background = "#e2e8f0";
+        document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر المشفّر...`;
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
         document.getElementById('clue-display').innerText = "";
         render(d.words, !isTurn);
+        socket.emit('joinGame', { userId: myUserId, name: document.getElementById('nick').value }); // تحديث القائمة دورياً
     });
 
     function render(words, disable) {
@@ -162,7 +168,6 @@
         if(selected.length !== 2 || !val) return alert("اختر 2 واكتب رابطاً!");
         socket.emit('submitClue', { clue: val, words: selected });
         document.getElementById('draw-ctrl').classList.add('hidden');
-        render([...document.querySelectorAll('.card')].map(c => c.innerText), true);
     }
 
     socket.on('showClue', d => {
@@ -171,9 +176,6 @@
             document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render(d.allWords, false);
-        } else {
-            document.getElementById('status').innerText = "انتظر تضليلاتهم...";
-            render(d.allWords, true);
         }
     });
 
@@ -186,7 +188,7 @@
 
     socket.on('startVoting', d => {
         const isDrawer = (myUserId === d.drawerId);
-        document.getElementById('status').innerText = isDrawer ? "اللاعبون يصوتون..." : "صوّت الآن للكلمات الأصلية!";
+        document.getElementById('status').innerText = isDrawer ? "اللاعبون يصوتون..." : "صوّت للأصلية!";
         document.getElementById('vote-ctrl').className = isDrawer ? "hidden" : "";
         render(d.options, isDrawer);
     });
@@ -199,7 +201,7 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! شاهد النتائج:";
+        document.getElementById('status').innerText = "انتهت الجولة!";
         render(d.finalOptions, true);
         setTimeout(() => {
             const cards = document.querySelectorAll('.card');
@@ -216,7 +218,8 @@
     });
 
     socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
-    socket.on('kicked', () => { alert("تم طردك!"); location.reload(); });
+    socket.on('kicked', () => { alert("تم طردك بواسطة المضيف!"); clearAndReload(); });
+    socket.on('banned', () => { alert("أنت محظور من دخول هذه الغرفة."); location.href = "about:blank"; });
     socket.on('gameOver', d => {
         document.getElementById('leaderboard-overlay').classList.remove('hidden');
         const list = document.getElementById('final-list'); list.innerHTML = "";
