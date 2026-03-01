@@ -78,7 +78,7 @@ io.on('connection', (socket) => {
         startTimer(60, () => {
             if (gameState === "DRAWING") {
                 io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! يتم تخطي الدور...`);
-                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { gameState = "LOBBY"; io.emit('gameOver'); } }, 3000);
+                setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { finishGame(); } }, 3000);
             }
         });
     }
@@ -121,7 +121,7 @@ io.on('connection', (socket) => {
         io.emit('roundFinished', { correctWords, scores, names: playerNames, allVotes: votes, finalOptions: votingOptions });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
-            else { gameState = "LOBBY"; io.emit('gameOver'); }
+            else { finishGame(); }
         }, 10000); 
     }
 
@@ -135,6 +135,14 @@ io.on('connection', (socket) => {
                 }
             }
         }
+    }
+
+    function finishGame() {
+        gameState = "LOBBY";
+        const leaderboard = Object.keys(scores)
+            .map(id => ({ name: playerNames[id], score: scores[id] }))
+            .sort((a, b) => b.score - a.score);
+        io.emit('gameOver', { leaderboard });
     }
 
     socket.on('disconnect', () => {
@@ -151,5 +159,4 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(3000, () => console.log(`Server started on port 3000`));
