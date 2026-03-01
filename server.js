@@ -101,6 +101,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitVote', (votedWords) => {
         const uId = socketToUserId[socket.id];
+        // منع صاحب الدور من التصويت برمجياً
         if (uId === currentDrawerId || votes[uId]) return;
         votes[uId] = votedWords;
         guessesReceived++;
@@ -110,6 +111,7 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
+        // إرسال النتائج للجميع (تأكد من وجود مصفوفة التصويتات)
         io.emit('roundFinished', { 
             correctWords, 
             scores, 
@@ -140,12 +142,11 @@ io.on('connection', (socket) => {
         delete socketToUserId[socket.id];
         if (uId === hostId && players.length > 0) {
             hostId = players[0];
-            players.forEach(pId => {
-                const sid = Object.keys(socketToUserId).find(k => socketToUserId[k] === pId);
-                if (sid) io.to(sid).emit('setRole', { role: (pId === hostId ? 'host' : 'player'), name: playerNames[pId] });
-            });
+            io.emit('updatePlayerList', players.map(id => playerNames[id]));
+            // إبلاغ المضيف الجديد
+            const sid = Object.keys(socketToUserId).find(k => socketToUserId[k] === hostId);
+            if(sid) io.to(sid).emit('setRole', { role: 'host', name: playerNames[hostId] });
         }
-        io.emit('updatePlayerList', players.map(id => playerNames[id]));
     });
 });
 
