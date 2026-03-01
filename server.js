@@ -36,14 +36,49 @@ io.on('connection', (socket) => {
         const userId = data.userId;
         const name = data.name;
         socketToUserId[socket.id] = userId;
+
+        // استعادة الجلسة أو إنشاء لاعب جديد
         if (!playerNames[userId]) {
             playerNames[userId] = name;
             scores[userId] = 0;
-            if (!players.includes(userId)) players.push(userId);
         }
+        if (!players.includes(userId)) players.push(userId);
+        
         if (!hostId || !players.includes(hostId)) hostId = players[0];
-        socket.emit('setRole', { role: (userId === hostId ? 'host' : 'player'), name: playerNames[userId] });
+
+        socket.emit('setRole', { 
+            role: (userId === hostId ? 'host' : 'player'), 
+            name: playerNames[userId]
+        });
+        
         io.emit('updatePlayerList', players.map(id => playerNames[id]));
+
+        // مزامنة اللاعب العائد مع حالة اللعبة الحالية
+        if (gameState !== "LOBBY") {
+            socket.emit('syncGame', {
+                state: gameState,
+                drawerId: currentDrawerId,
+                drawerName: playerNames[currentDrawerId],
+                clue: currentClue,
+                round: currentRound,
+                total: totalRounds,
+                scores,
+                playerNames,
+                words: (userId === currentDrawerId ? currentWords : (gameState === "FAKING" ? currentWords : [])),
+                votingOptions: votingOptions
+            });
+        }
+    });
+
+    socket.on('kickPlayer', (targetName) => {
+        if (socketToUserId[socket.id] === hostId) {
+            const targetUserId = Object.keys(playerNames).find(id => playerNames[id] === targetName);
+            const targetSid = Object.keys(socketToUserId).find(sid => socketToUserId[sid] === targetUserId);
+            if (targetSid) {
+                io.to(targetSid).emit('kicked');
+                if(io.sockets.sockets.get(targetSid)) io.sockets.sockets.get(targetSid).disconnect();
+            }
+        }
     });
 
     socket.on('requestStart', (data) => {
@@ -60,6 +95,7 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
+        
         if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -76,7 +112,7 @@ io.on('connection', (socket) => {
 
         startTimer(60, () => {
             if (gameState === "DRAWING") {
-                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! يتم تخطي الدور...`);
+                io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! تخطي الدور...`);
                 setTimeout(() => { if(currentRound < totalRounds) { currentRound++; startNewRound(); } else { finishGame(); } }, 3000);
             }
         });
@@ -138,16 +174,13 @@ io.on('connection', (socket) => {
 
     function finishGame() {
         gameState = "LOBBY";
-        const leaderboard = Object.keys(scores)
-            .map(id => ({ name: playerNames[id], score: scores[id] }))
-            .sort((a, b) => b.score - a.score);
+        const leaderboard = Object.keys(scores).map(id => ({ name: playerNames[id], score: scores[id] })).sort((a, b) => b.score - a.score);
         io.emit('gameOver', { leaderboard });
     }
 
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         players = players.filter(id => id !== uId);
-        drawerQueue = drawerQueue.filter(id => id !== uId);
         delete socketToUserId[socket.id];
         if (uId === hostId && players.length > 0) {
             hostId = players[0];
@@ -158,4 +191,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => console.log('Server running on port 3000'));
+server.listen(3000, () => console.log('Server running on 3000'));

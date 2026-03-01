@@ -5,14 +5,14 @@
     <title>لعبة الروابط 🔗</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; margin: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; text-align: center; padding: 10px; margin: 0; }
         .box { background: white; max-width: 700px; margin: 20px auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
         .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; min-height: 85px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
         .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; }
         .card.disabled { opacity: 0.8; cursor: not-allowed; pointer-events: none; }
-        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; }
+        #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.1em; background: #e2e8f0; padding: 12px; border-radius: 10px; transition: 0.3s; }
         .hidden { display: none !important; }
         button { background: #2563eb; color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; }
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
@@ -20,12 +20,10 @@
         #score-board { background: #1e293b; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
         .score-item { margin: 5px 15px; font-size: 0.9em; }
         input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 80%; margin-bottom: 10px; }
-        
         #leaderboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; color: white; }
         .leaderboard-box { background: white; color: #1e293b; padding: 30px; border-radius: 20px; width: 90%; max-width: 400px; text-align: center; }
         .leader-row { display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #e2e8f0; font-size: 1.2em; }
         .leader-row:first-child { background: #fef3c7; color: #d97706; font-weight: bold; border-radius: 8px; border-bottom: none; }
-        .leader-title { font-size: 2em; margin-bottom: 20px; display: block; color: #2563eb; }
     </style>
 </head>
 <body>
@@ -62,21 +60,26 @@
 
 <div id="leaderboard-overlay" class="hidden">
     <div class="leaderboard-box">
-        <span class="leader-title">🏆 النتائج النهائية</span>
+        <span style="font-size:2em; color:#2563eb; display:block; margin-bottom:20px;">🏆 النتائج النهائية</span>
         <div id="final-list"></div>
-        <br>
-        <button onclick="location.reload()" style="width:100%">لعبة جديدة 🔄</button>
+        <br><button onclick="location.reload()" style="width:100%">لعبة جديدة 🔄</button>
     </div>
 </div>
 
 <script>
     const socket = io();
-    let selected = [], currentDrawerId = null, myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
+    let selected = [], myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
     sessionStorage.setItem('links_id', myUserId);
+
+    window.onload = () => {
+        const savedName = localStorage.getItem('links_name');
+        if (savedName) { document.getElementById('nick').value = savedName; join(); }
+    }
 
     function join() {
         const n = document.getElementById('nick').value;
         if(!n) return alert("اكتب اسمك!");
+        localStorage.setItem('links_name', n);
         socket.emit('joinGame', { userId: myUserId, name: n });
         document.getElementById('name-screen').classList.add('hidden');
         document.getElementById('lobby-screen').classList.remove('hidden');
@@ -88,11 +91,39 @@
         document.getElementById('host-zone').className = isHost ? "" : "hidden";
     });
 
-    socket.on('updatePlayerList', names => document.getElementById('online-players').innerText = names.join(" - "));
+    socket.on('updatePlayerList', names => {
+        const listDiv = document.getElementById('online-players');
+        listDiv.innerHTML = "";
+        const isHost = !document.getElementById('host-zone').classList.contains('hidden');
+        names.forEach(name => {
+            const span = document.createElement('span'); span.style.margin = "0 10px"; span.innerText = name;
+            if (isHost && name !== document.getElementById('nick').value) {
+                const b = document.createElement('button'); b.innerText = "❌"; b.style.padding = "2px 5px"; b.style.marginLeft = "5px"; b.style.background = "#ef4444";
+                b.onclick = () => { if(confirm(`طرد ${name}؟`)) socket.emit('kickPlayer', name); };
+                span.appendChild(b);
+            }
+            listDiv.appendChild(span);
+        });
+    });
 
-    socket.on('statusUpdate', msg => {
-        const s = document.getElementById('status');
-        s.innerText = msg; s.style.background = "#fee2e2";
+    socket.on('syncGame', d => {
+        document.getElementById('lobby-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        updateScores(d.scores, d.playerNames);
+        if (d.state === "DRAWING") {
+            const isTurn = (myUserId === d.drawerId);
+            document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
+            document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
+            render(d.words, !isTurn);
+        } else if (d.state === "FAKING") {
+            document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
+            if(myUserId !== d.drawerId) document.getElementById('fake-ctrl').classList.remove('hidden');
+            render(d.words, false);
+        } else if (d.state === "VOTING") {
+            document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
+            if(myUserId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
+            render(d.votingOptions, (myUserId === d.drawerId));
+        }
     });
 
     socket.on('roundStarted', d => {
@@ -100,9 +131,8 @@
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         updateScores(d.scores, d.playerNames);
-        currentDrawerId = d.drawerId;
-        const isTurn = (myUserId === d.drawerId);
         selected = [];
+        const isTurn = (myUserId === d.drawerId);
         document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName} يكتب الرابط...`;
         document.getElementById('status').style.background = "#e2e8f0";
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
@@ -124,7 +154,7 @@
 
     function updateScores(s, n) {
         const list = document.getElementById('s-list'); list.innerHTML = "";
-        for(let id in s) list.innerHTML += `<span class="score-item">${n[id] || 'لاعب'}: ${s[id]}</span>`;
+        for(let id in s) if(n[id]) list.innerHTML += `<span class="score-item">${n[id]}: ${s[id]}</span>`;
     }
 
     function sendClue() {
@@ -137,7 +167,7 @@
 
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
-        if(myUserId !== currentDrawerId) {
+        if(myUserId !== d.drawerId) {
             document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render(d.allWords, false);
@@ -176,11 +206,9 @@
             cards.forEach(card => {
                 const word = card.innerText;
                 if(d.correctWords.includes(word)) card.classList.add('correct-answer');
-                for(let uId in d.allVotes) {
-                    if(d.allVotes[uId].includes(word)) {
-                        const tag = document.createElement('div'); tag.className = 'vote-tag';
-                        tag.innerText = "🚩 " + d.names[uId]; card.appendChild(tag);
-                    }
+                for(let uId in d.allVotes) if(d.allVotes[uId].includes(word)) {
+                    const tag = document.createElement('div'); tag.className = 'vote-tag';
+                    tag.innerText = "🚩 " + d.names[uId]; card.appendChild(tag);
                 }
             });
         }, 50);
@@ -188,20 +216,17 @@
     });
 
     socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
-
+    socket.on('kicked', () => { alert("تم طردك!"); location.reload(); });
     socket.on('gameOver', d => {
         document.getElementById('leaderboard-overlay').classList.remove('hidden');
-        const list = document.getElementById('final-list');
-        list.innerHTML = "";
+        const list = document.getElementById('final-list'); list.innerHTML = "";
         d.leaderboard.forEach((p, i) => {
             const emoji = i === 0 ? "🥇" : (i === 1 ? "🥈" : (i === 2 ? "🥉" : "👤"));
             list.innerHTML += `<div class="leader-row"><span>${emoji} ${p.name}</span><span>${p.score}</span></div>`;
         });
     });
 
-    function startGame() {
-        socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value });
-    }
+    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
 </script>
 </body>
 </html>
