@@ -60,7 +60,6 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
-        
         if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -159,4 +158,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => console.log(`Server started on port 3000`));
+server.listen(3000, () => console.log('Server running on port 3000'));
