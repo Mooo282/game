@@ -2,15 +2,14 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗 الإصدار النهائي</title>
+    <title>لعبة الروابط 🔗</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; }
         .box { background: white; max-width: 650px; margin: auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.3s; font-size: 1.1em; }
+        .card { padding: 18px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; transition: 0.2s; font-size: 1.1em; }
         .card.selected { background: #fbbf24; border-color: #d97706; }
-        /* تصميم الإجابة الصحيحة لجميع الأجهزة */
         .card.correct-answer { background: #22c55e !important; color: white !important; border-color: #16a34a !important; box-shadow: 0 0 15px #22c55e; }
         .card.disabled { opacity: 0.7; cursor: not-allowed; pointer-events: none; }
         #status { font-weight: bold; margin: 15px 0; color: #1e293b; font-size: 1.2em; background: #e2e8f0; padding: 12px; border-radius: 10px; min-height: 1.5em; }
@@ -19,8 +18,7 @@
         #timer { font-size: 2.2em; color: #ef4444; font-weight: 900; }
         #score-board { background: #1e293b; color: white; padding: 12px; border-radius: 12px; margin-bottom: 20px; display: flex; justify-content: center; flex-wrap: wrap; }
         .score-item { margin: 5px 15px; font-size: 0.9em; }
-        #player-list-box { background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #cbd5e1; margin-bottom: 20px; }
-        input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 75%; margin-bottom: 10px; font-size: 1em; }
+        input, select { padding: 12px; border-radius: 10px; border: 2px solid #cbd5e1; width: 75%; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -30,10 +28,9 @@
         <input type="text" id="nick" placeholder="اسمك المستعار...">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
-
     <div id="lobby-screen" class="hidden">
         <h2 id="wait-msg">جاري الاتصال...</h2>
-        <div id="player-list-box">
+        <div id="player-list-box" style="background:#f8fafc; padding:15px; border-radius:12px; border:1px solid #cbd5e1; margin-bottom:20px;">
             <strong>المتواجدون:</strong> <div id="online-players" style="margin-top:10px; color:#2563eb; font-weight:bold;"></div>
         </div>
         <div id="host-zone" class="hidden">
@@ -41,7 +38,6 @@
             <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
         </div>
     </div>
-
     <div id="game-screen" class="hidden">
         <div id="score-board"><div id="s-list"></div></div>
         <div id="round-info" style="color:#64748b; font-weight:bold;"></div>
@@ -51,13 +47,12 @@
         <div class="grid" id="grid"></div>
         <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط..."><br><button onclick="sendClue()">إرسال</button></div>
         <div id="fake-ctrl" class="hidden"><button onclick="sendFake()">إرسال التضليل</button></div>
-        <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تصويت</button></div>
+        <div id="vote-ctrl" class="hidden"><button onclick="sendVote()">تأكيد التصويت</button></div>
     </div>
 </div>
-
 <script>
     const socket = io();
-    let selected = [], myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
+    let selected = [], currentDrawerId = null, myUserId = sessionStorage.getItem('links_id') || 'u_'+Math.random().toString(36).substr(2,9);
     sessionStorage.setItem('links_id', myUserId);
 
     function join() {
@@ -75,29 +70,16 @@
         else document.getElementById('host-zone').classList.add('hidden');
     });
 
-    socket.on('updatePlayerList', (names) => { document.getElementById('online-players').innerText = names.join(" - "); });
-
-    socket.on('syncGame', d => {
-        document.getElementById('lobby-screen').classList.add('hidden');
-        document.getElementById('game-screen').classList.remove('hidden');
-        document.getElementById('round-info').innerText = `الجولة ${d.round} من ${d.total}`;
-        updateScores(d.scores, d.playerNames);
-        document.getElementById('clue-display').innerText = d.clue ? `الرابط من ${d.drawerName}: ${d.clue}` : "";
-        render(d.words, true);
-    });
-
-    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
-    socket.on('timerUpdate', t => document.getElementById('timer').innerText = t);
+    socket.on('updatePlayerList', names => document.getElementById('online-players').innerText = names.join(" - "));
 
     socket.on('roundStarted', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
-        document.getElementById('round-info').innerText = `الجولة ${d.currentRound} من ${d.totalRounds}`;
+        currentDrawerId = d.drawerId;
         updateScores(d.scores, d.playerNames);
         const isTurn = myUserId === d.drawerId;
         selected = [];
         document.getElementById('status').innerText = isTurn ? "دورك! اختر كلمتين واكتب رابطاً" : `انتظر ${d.drawerName}...`;
-        document.getElementById('status').style.color = "#1e293b";
         document.getElementById('draw-ctrl').className = isTurn ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
@@ -110,10 +92,7 @@
         words.forEach(w => {
             const div = document.createElement('div'); div.className = 'card' + (disable ? ' disabled' : '');
             div.innerText = w;
-            div.onclick = () => { if(!disable) { 
-                div.classList.toggle('selected'); 
-                selected = [...document.querySelectorAll('.selected')].map(e => e.innerText);
-            }};
+            div.onclick = () => { if(!disable) { div.classList.toggle('selected'); selected = [...document.querySelectorAll('.selected')].map(e => e.innerText); } };
             g.appendChild(div);
         });
     }
@@ -134,7 +113,7 @@
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `الرابط من ${d.drawerName}: ${d.clue}`;
         if(myUserId !== d.drawerId) {
-            document.getElementById('status').innerText = "مرحلة التضليل! خدع البقية.";
+            document.getElementById('status').innerText = "تضليل! اختر كلمتين.";
             document.getElementById('fake-ctrl').classList.remove('hidden');
             render([...document.querySelectorAll('.card')].map(c => c.innerText), false);
         } else {
@@ -152,10 +131,13 @@
     }
 
     socket.on('startVoting', d => {
-        document.getElementById('status').innerText = "صوّت للأصلية!";
-        const isDrawer = document.getElementById('draw-ctrl').className === ""; // فحص بسيط
-        if(document.getElementById('status').innerText.includes("انتظر")) render(d.options, true);
-        else {
+        const isDrawer = (myUserId === d.drawerId);
+        if(isDrawer) {
+            document.getElementById('status').innerText = "أصدقاؤك يصوتون الآن.. انتظر النتيجة!";
+            document.getElementById('vote-ctrl').classList.add('hidden');
+            render(d.options, true);
+        } else {
+            document.getElementById('status').innerText = "صوّت الآن للكلمات الأصلية!";
             document.getElementById('vote-ctrl').classList.remove('hidden');
             render(d.options, false);
         }
@@ -170,20 +152,19 @@
     }
 
     socket.on('roundFinished', d => {
-        document.getElementById('status').innerText = "انتهت الجولة! الكلمات الأصلية بالأخضر ✅";
+        document.getElementById('status').innerText = "انتهت الجولة! الإجابة: " + d.correctWords.join(" و ");
         document.getElementById('status').style.color = "#22c55e";
-        
-        const cards = document.querySelectorAll('.card');
-        cards.forEach(c => {
-            c.classList.add('disabled');
-            if (d.correctWords.includes(c.innerText)) {
-                c.classList.add('correct-answer'); // تطبيق الكلاس الأخضر
-                c.style.background = "#22c55e"; // تأكيد اللون يدوياً
+        document.querySelectorAll('.card').forEach(c => {
+            if(d.correctWords.includes(c.innerText)) {
+                c.classList.add('correct-answer');
+                c.style.background = "#22c55e";
             }
         });
         updateScores(d.scores, d.names);
     });
 
+    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
+    socket.on('timerUpdate', t => document.getElementById('timer').innerText = t);
     socket.on('gameOver', d => { alert("انتهت اللعبة!"); location.reload(); });
     socket.on('waiting', () => document.getElementById('status').innerText = "تم الاستلام.. بانتظار البقية ⌛");
 </script>

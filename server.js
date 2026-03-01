@@ -96,13 +96,15 @@ io.on('connection', (socket) => {
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
-        io.emit('startVoting', { options: votingOptions });
+        io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
         startTimer(45, () => finalizeRound());
     }
 
     socket.on('submitVote', (votedWords) => {
         const uId = socketToUserId[socket.id];
+        // منع المشفّر من التصويت برمجياً في السيرفر
         if (uId === currentDrawerId || votes[uId]) return;
+
         votes[uId] = votedWords;
         guessesReceived++;
         socket.emit('waiting');
@@ -110,8 +112,7 @@ io.on('connection', (socket) => {
     });
 
     function finalizeRound() {
-        gameState = "RESULTS";
-        clearInterval(timer);
+        gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
         io.emit('roundFinished', { correctWords, scores, names: playerNames });
         setTimeout(() => {
