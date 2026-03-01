@@ -39,7 +39,6 @@ io.on('connection', (socket) => {
             if (!players.includes(userId)) players.push(userId);
         }
         
-        // تعيين المضيف الأول
         if (!hostId || !players.includes(hostId)) hostId = players[0];
 
         socket.emit('setRole', { 
@@ -51,7 +50,7 @@ io.on('connection', (socket) => {
 
     socket.on('requestStart', (data) => {
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
-            players.forEach(id => scores[id] = 0); // تصفير النقاط
+            players.forEach(id => scores[id] = 0); 
             totalRounds = parseInt(data.rounds) || 5;
             currentRound = 1;
             startNewRound();
@@ -111,11 +110,16 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS"; clearInterval(timer);
         calculateScores();
-        io.emit('roundFinished', { correctWords, scores, names: playerNames });
+        io.emit('roundFinished', { 
+            correctWords, 
+            scores, 
+            names: playerNames,
+            allVotes: votes 
+        });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); }
             else { gameState = "LOBBY"; io.emit('gameOver'); }
-        }, 8000);
+        }, 10000); 
     }
 
     function calculateScores() {
@@ -134,8 +138,6 @@ io.on('connection', (socket) => {
         const uId = socketToUserId[socket.id];
         players = players.filter(id => id !== uId);
         delete socketToUserId[socket.id];
-
-        // ميزة انتقال المضيف: إذا خرج المضيف، عيّن لاعباً آخر
         if (uId === hostId && players.length > 0) {
             hostId = players[0];
             players.forEach(pId => {
