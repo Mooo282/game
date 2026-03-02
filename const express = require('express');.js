@@ -6,7 +6,6 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// قائمة الكلمات المقترحة
 const allWords = ["نسر", "غراب", "بطارية", "سفاح", "ساطور", "نووي", "بلح", "زعتر", "شجرة", "مربع", "ستوديو", "عش", "حديد", "تكييف", "دماغ", "ضوضاء", "دخان", "قرص", "مايك", "حذاء", "طماطم", "سفنجة", "تصحيح", "سلاح", "اذاعة", "كيكة", "درع", "محتوى", "سوداوية", "عدمية", "هرجلة", "ايمان", "علاج", "تشفير", "كاسورة", "سيخ", "كديس", "كلب", "زريبة", "راية", "فيل", "مخرج", "احلام", "كهرباء", "الخلا", "ذهب", "اسفلت", "العالم", "السبيل", "نار", "مركب", "خازوق", "شبكة"];
 
 let players = [], scores = {}, playerNames = {}, hostId = null;
@@ -15,7 +14,7 @@ let fakeWords = {}, votes = {}, guessesReceived = 0, timer, timeLeft = 60;
 let gameState = "LOBBY", currentWords = [], currentClue = "";
 let socketToUserId = {};
 let drawerQueue = [];
-let disconnectTimeouts = {}; // مخزن مهلة الـ 60 ثانية
+let disconnectTimeouts = {}; 
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
@@ -38,15 +37,12 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
         
-        // إذا عاد اللاعب قبل انتهاء الـ 60 ثانية، نلغي عملية حذفه
         if (disconnectTimeouts[userId]) {
             clearTimeout(disconnectTimeouts[userId]);
             delete disconnectTimeouts[userId];
         }
 
         socketToUserId[socket.id] = userId;
-        
-        // تحديث الاسم دائماً بالمدخل الجديد أو القديم
         if (data.name) playerNames[userId] = data.name;
         if (scores[userId] === undefined) scores[userId] = 0;
         
@@ -54,13 +50,8 @@ io.on('connection', (socket) => {
         if (!hostId || !players.includes(hostId)) hostId = players[0];
         
         emitPlayerList();
-        
-        // إذا كانت اللعبة جارية، نرسل للاعب العائد حالة اللعبة الحالية
         if (gameState !== "LOBBY") {
-            socket.emit('rejoinState', { 
-                gameState, currentWords, currentClue, currentDrawerId, 
-                currentRound, totalRounds, drawerName: playerNames[currentDrawerId] 
-            });
+            socket.emit('rejoinState', { gameState, currentWords, currentClue, currentDrawerId, currentRound, totalRounds, drawerName: playerNames[currentDrawerId] });
         }
     });
 
@@ -78,20 +69,12 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
-        
         if (!players.includes(currentDrawerId)) {
             if (players.length > 0) return startNewRound();
             return finishGame();
         }
-
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
-        io.emit('roundStarted', { 
-            words: currentWords, 
-            drawerId: currentDrawerId, 
-            drawerName: playerNames[currentDrawerId],
-            currentRound, totalRounds 
-        });
-
+        io.emit('roundStarted', { words: currentWords, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId], currentRound, totalRounds });
         startTimer(60, () => { if (gameState === "DRAWING") startNewRound(); });
     }
 
@@ -161,19 +144,23 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         if (uId) {
-            // ننتظر 60 ثانية قبل الحذف النهائي
             disconnectTimeouts[uId] = setTimeout(() => {
+                // حذف البيانات من السيرفر
                 players = players.filter(id => id !== uId);
                 delete playerNames[uId];
                 delete scores[uId];
+                
+                // أمر للمتصفح بحذف الهوية المخزنة
+                io.emit('sessionExpired', uId); 
+
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
                 emitPlayerList();
                 delete disconnectTimeouts[uId];
-            }, 60000);
+            }, 60000); // 60 ثانية
             delete socketToUserId[socket.id];
         }
     });
 });
 
-server.listen(3000, () => console.log('Server is running on http://localhost:3000'));
+server.listen(3000, () => console.log('Server: http://localhost:3000'));

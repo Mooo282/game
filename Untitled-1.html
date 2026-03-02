@@ -23,33 +23,27 @@
 
 <div class="box">
     <div id="player-bar" class="hidden"></div>
-
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
         <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; border-radius:8px; border:1px solid #ccc;">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
-
     <div id="lobby-screen" class="hidden">
-        <h2 id="wait-msg">بانتظار المضيف لضبط الجولات...</h2>
+        <h2 id="wait-msg">بانتظار المضيف...</h2>
         <div id="host-controls" class="hidden">
             <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
-            <br><br><button onclick="startGame()">ابدأ الجولة 🚀</button>
+            <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
         </div>
     </div>
-
     <div id="game-screen" class="hidden">
         <div id="timer">60</div>
-        <div id="status" style="font-weight:bold; margin-bottom:10px;"></div>
-        <div id="clue-display" style="font-size:1.8em; color:#ea580c; margin:10px 0;"></div>
+        <div id="status" style="font-weight:bold;"></div>
+        <div id="clue-display" style="font-size:1.8em; color:#ea580c;"></div>
         <div class="grid" id="grid"></div>
         <div id="controls">
-            <div id="draw-ctrl" class="hidden">
-                <input type="text" id="clue-in" placeholder="تلميحك...">
-                <button onclick="sendAction('submitClue')">إرسال (اختر 2)</button>
-            </div>
-            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">إرسال تضليل (اختر 2)</button></div>
-            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت (اختر 2)</button></div>
+            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميح..."><button onclick="sendAction('submitClue')">إرسال (2)</button></div>
+            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">تضليل (2)</button></div>
+            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت (2)</button></div>
         </div>
     </div>
 </div>
@@ -63,13 +57,8 @@
 
 <script>
     const socket = io();
-    
-    // نظام الجلسة المستمرة باستخدام LocalStorage
-    let myId = localStorage.getItem('game_user_id');
-    if (!myId) {
-        myId = 'u_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('game_user_id', myId);
-    }
+    let myId = localStorage.getItem('game_user_id') || ('u_' + Math.random().toString(36).substr(2, 9));
+    localStorage.setItem('game_user_id', myId);
 
     let isHost = false, selected = [], currentDrawerId = null;
 
@@ -89,8 +78,7 @@
     }
 
     function startGame() {
-        const r = document.getElementById('rounds-count').value;
-        socket.emit('requestStart', { rounds: r });
+        socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value });
     }
 
     socket.on('updatePlayerList', d => {
@@ -105,30 +93,32 @@
         });
     });
 
+    socket.on('sessionExpired', (expiredId) => {
+        if (myId === expiredId) {
+            localStorage.removeItem('game_user_id');
+            localStorage.removeItem('game_user_name');
+            alert("انتهت جلستك للغياب. سيتم تصفير هويتك.");
+            location.reload();
+        }
+    });
+
     socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
 
     socket.on('roundStarted', d => {
-        setupRound(d);
-    });
-
-    function setupRound(d) {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         currentDrawerId = d.drawerId;
-        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك الآن!" : `تلميح من: ${d.drawerName}`;
+        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك!" : `تلميح من: ${d.drawerName}`;
         document.getElementById('draw-ctrl').className = (myId === d.drawerId) ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
-        document.getElementById('clue-display').innerText = "";
         render(d.words, (myId !== d.drawerId));
-    }
+    });
 
     socket.on('showClue', d => {
         document.getElementById('clue-display').innerText = `التلميح: ${d.clue}`;
-        if(myId !== d.drawerId) {
-            document.getElementById('fake-ctrl').classList.remove('hidden');
-            render(d.allWords, false);
-        }
+        if(myId !== d.drawerId) document.getElementById('fake-ctrl').classList.remove('hidden');
+        render(d.allWords, false);
     });
 
     socket.on('startVoting', d => {
