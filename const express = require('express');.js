@@ -44,7 +44,7 @@ io.on('connection', (socket) => {
         if (data.name) playerNames[userId] = data.name;
         if (scores[userId] === undefined) scores[userId] = 0;
         if (!players.includes(userId)) players.push(userId);
-        if (!hostId || !players.includes(hostId)) hostId = players[0];
+        if (!hostId || !players.includes(hostId)) hostId = userId; // تعديل بسيط لضمان اول لاعب هو الهوست
         emitPlayerList();
     });
 
@@ -150,4 +150,5 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => console.log('Server is online: http://localhost:3000'));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
