@@ -37,34 +37,44 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
         if (bannedUsers.has(userId)) return socket.emit('banned');
+        
         socketToUserId[socket.id] = userId;
-        if (!playerNames[userId]) { playerNames[userId] = data.name; scores[userId] = 0; }
+        // تسجيل بيانات جديدة دائماً عند الدخول
+        playerNames[userId] = data.name;
+        scores[userId] = 0;
+        
         if (!players.includes(userId)) players.push(userId);
         if (!hostId || !players.includes(hostId)) hostId = players[0];
+        
         socket.emit('setRole', { role: (userId === hostId ? 'host' : 'player'), userId: userId });
         emitPlayerList();
     });
 
     socket.on('changeName', (newName) => {
         const uId = socketToUserId[socket.id];
-        if (uId && newName.trim()) { playerNames[uId] = newName.trim().substring(0, 15); emitPlayerList(); }
+        if (uId && newName.trim()) {
+            playerNames[uId] = newName.trim().substring(0, 15);
+            emitPlayerList();
+        }
     });
 
     socket.on('kickPlayer', (targetUserId) => {
         if (socketToUserId[socket.id] === hostId && targetUserId !== hostId) {
             bannedUsers.add(targetUserId);
             const targetSid = Object.keys(socketToUserId).find(sid => socketToUserId[sid] === targetUserId);
-            if (targetSid) { io.to(targetSid).emit('kicked'); io.sockets.sockets.get(targetSid)?.disconnect(); }
-            players = players.filter(id => id !== targetUserId);
-            if (targetUserId === currentDrawerId && gameState !== "LOBBY") startNewRound();
-            emitPlayerList();
+            if (targetSid) {
+                io.to(targetSid).emit('kicked');
+                io.sockets.sockets.get(targetSid)?.disconnect();
+            }
         }
     });
 
     socket.on('requestStart', (data) => {
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
             players.forEach(id => scores[id] = 0);
-            totalRounds = parseInt(data.rounds) || 5; currentRound = 1; drawerQueue = [];
+            totalRounds = parseInt(data.rounds) || 5;
+            currentRound = 1;
+            drawerQueue = [];
             startNewRound();
         }
     });
@@ -73,10 +83,23 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
-        if (!players.includes(currentDrawerId)) { if (players.length > 0) return startNewRound(); return finishGame(); }
+        
+        if (!players.includes(currentDrawerId)) {
+            if (players.length > 0) return startNewRound();
+            return finishGame();
+        }
+
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
-        io.emit('roundStarted', { words: currentWords, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId], currentRound, totalRounds, scores, playerNames, hostId });
-        startTimer(60, () => { if (gameState === "DRAWING") startNewRound(); });
+        io.emit('roundStarted', { 
+            words: currentWords, 
+            drawerId: currentDrawerId, 
+            drawerName: playerNames[currentDrawerId],
+            currentRound, totalRounds, scores, playerNames, hostId 
+        });
+
+        startTimer(60, () => {
+            if (gameState === "DRAWING") startNewRound();
+        });
     }
 
     socket.on('submitClue', (data) => {
@@ -89,7 +112,8 @@ io.on('connection', (socket) => {
     socket.on('submitFake', (words) => {
         const uId = socketToUserId[socket.id];
         if (uId === currentDrawerId || fakeWords[uId] || gameState !== "FAKING") return;
-        fakeWords[uId] = words; guessesReceived++;
+        fakeWords[uId] = words;
+        guessesReceived++;
         if (guessesReceived >= (players.length - 1)) proceedToVoting();
     });
 
@@ -105,21 +129,31 @@ io.on('connection', (socket) => {
     socket.on('submitVote', (votedWords) => {
         const uId = socketToUserId[socket.id];
         if (uId === currentDrawerId || votes[uId] || gameState !== "VOTING") return;
-        votes[uId] = votedWords; guessesReceived++;
+        votes[uId] = votedWords;
+        guessesReceived++;
         if (guessesReceived >= (players.length - 1)) finalizeRound();
     });
 
     function finalizeRound() {
-        gameState = "RESULTS"; clearInterval(timer); calculateScores();
+        gameState = "RESULTS"; clearInterval(timer);
+        calculateScores();
         io.emit('roundFinished', { correctWords, scores, names: playerNames });
-        setTimeout(() => { if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); } else { finishGame(); } }, 8000);
+        setTimeout(() => {
+            if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); } 
+            else { finishGame(); }
+        }, 8000);
     }
 
     function calculateScores() {
         for (let voterId in votes) {
             const vote = votes[voterId];
-            if (vote.every(w => correctWords.includes(w))) { scores[voterId] += 10; scores[currentDrawerId] += 5; }
-            else { for (let fId in fakeWords) { if (fId !== voterId && vote.every(w => fakeWords[fId].includes(w))) scores[fId] += 7; } }
+            if (vote.every(w => correctWords.includes(w))) {
+                scores[voterId] += 10; scores[currentDrawerId] += 5;
+            } else {
+                for (let fId in fakeWords) {
+                    if (fId !== voterId && vote.every(w => fakeWords[fId].includes(w))) scores[fId] += 7;
+                }
+            }
         }
     }
 
@@ -131,10 +165,17 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
-        players = players.filter(id => id !== uId);
-        if (uId === hostId) hostId = players[0] || null;
-        if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
-        emitPlayerList();
+        if (uId) {
+            // حذف بيانات اللاعب فوراً لكي يظهر كجديد إذا دخل مرة أخرى
+            delete playerNames[uId];
+            delete scores[uId];
+            players = players.filter(id => id !== uId);
+            delete socketToUserId[socket.id];
+
+            if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
+            if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
+            emitPlayerList();
+        }
     });
 });
 
