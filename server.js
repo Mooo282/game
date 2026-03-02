@@ -93,7 +93,7 @@ io.on('connection', (socket) => {
         }
         currentDrawerId = drawerQueue.shift();
 
-        // حماية إذا خرج اللاعب
+        
         if (!players.includes(currentDrawerId) && players.length > 0) return startNewRound();
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
@@ -106,7 +106,7 @@ io.on('connection', (socket) => {
             });
         });
 
-        // تعديل: إذا انتهى الوقت ولم يرسل المشفّر، لا تزد الجولة بل اسحب لاعباً آخر
+        
         startTimer(60, () => {
             if (gameState === "DRAWING") {
                 io.emit('statusUpdate', `انتهى وقت ${playerNames[currentDrawerId]}! يتم تبديل المشفّر...`);
@@ -189,3 +189,4 @@ io.on('connection', (socket) => {
 });
 
 server.listen(3000, () => console.log('Server started'));
+
