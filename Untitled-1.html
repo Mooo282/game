@@ -12,7 +12,7 @@
         .p-tag.is-me { border-color: #2563eb; background: #eff6ff; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
         .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; min-height: 50px; display: flex; justify-content: center; align-items: center; transition: 0.2s; }
-        .card.selected { background: #fbbf24; border-color: #d97706; transform: translateY(-2px); }
+        .card.selected { background: #fbbf24; border-color: #d97706; }
         .card.correct-answer { background: #22c55e !important; color: white !important; }
         .hidden { display: none !important; }
         button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
@@ -25,7 +25,7 @@
     <div id="player-bar" class="hidden"></div>
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; border-radius:8px; border:1px solid #ccc;">
+        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; border-radius:8px;">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
     <div id="lobby-screen" class="hidden">
@@ -48,30 +48,36 @@
     </div>
 </div>
 
-<div id="leaderboard-overlay" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); color:white; display:flex; align-items:center; justify-content:center; z-index:100;">
-    <div style="background:white; color:black; padding:30px; border-radius:20px; width:300px;">
-        <h2>النتائج النهائية 🏆</h2><div id="final-list"></div>
-        <br><button onclick="location.reload()">لعبة جديدة</button>
-    </div>
-</div>
-
 <script>
     const socket = io();
     let myId = localStorage.getItem('game_user_id') || ('u_' + Math.random().toString(36).substr(2, 9));
     localStorage.setItem('game_user_id', myId);
 
-    let isHost = false, selected = [], currentDrawerId = null;
+    let isHost = false, selected = [];
 
+    // التحقق التلقائي عند فتح الصفحة
     window.onload = () => {
         const savedName = localStorage.getItem('game_user_name');
-        if (savedName) document.getElementById('nick').value = savedName;
+        if (savedName) {
+            socket.emit('joinGame', { userId: myId, name: savedName, isReturning: true });
+            document.getElementById('name-screen').classList.add('hidden');
+            document.getElementById('player-bar').classList.remove('hidden');
+            document.getElementById('lobby-screen').classList.remove('hidden');
+        }
     };
+
+    socket.on('sessionExpired', () => {
+        localStorage.removeItem('game_user_id');
+        localStorage.removeItem('game_user_name');
+        alert("انتهت جلستك السابقة. يرجى إدخال اسم جديد.");
+        location.reload();
+    });
 
     function join() {
         const n = document.getElementById('nick').value;
         if(!n) return alert("الاسم مطلوب");
         localStorage.setItem('game_user_name', n);
-        socket.emit('joinGame', { userId: myId, name: n });
+        socket.emit('joinGame', { userId: myId, name: n, isReturning: false });
         document.getElementById('name-screen').classList.add('hidden');
         document.getElementById('player-bar').classList.remove('hidden');
         document.getElementById('lobby-screen').classList.remove('hidden');
@@ -93,22 +99,12 @@
         });
     });
 
-    socket.on('sessionExpired', (expiredId) => {
-        if (myId === expiredId) {
-            localStorage.removeItem('game_user_id');
-            localStorage.removeItem('game_user_name');
-            alert("انتهت جلستك للغياب. سيتم تصفير هويتك.");
-            location.reload();
-        }
-    });
-
     socket.on('timerUpdate', t => { document.getElementById('timer').innerText = t; });
 
     socket.on('roundStarted', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
-        currentDrawerId = d.drawerId;
-        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك!" : `تلميح من: ${d.drawerName}`;
+        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك!" : `تخمين من تلميح: ${d.drawerName}`;
         document.getElementById('draw-ctrl').className = (myId === d.drawerId) ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";
@@ -131,12 +127,6 @@
         document.querySelectorAll('.card').forEach(c => {
             if(d.correctWords.includes(c.innerText)) c.classList.add('correct-answer');
         });
-    });
-
-    socket.on('gameOver', d => {
-        document.getElementById('game-screen').classList.add('hidden');
-        document.getElementById('leaderboard-overlay').classList.remove('hidden');
-        document.getElementById('final-list').innerHTML = d.leaderboard.map(p => `<p>${p.name}: ${p.score}</p>`).join('');
     });
 
     function render(words, disable) {

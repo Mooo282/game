@@ -37,6 +37,11 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
         
+        // التحقق: هل اللاعب يحاول العودة لجلسة حذفها السيرفر؟
+        if (data.isReturning && !playerNames[userId]) {
+            return socket.emit('sessionExpired');
+        }
+
         if (disconnectTimeouts[userId]) {
             clearTimeout(disconnectTimeouts[userId]);
             delete disconnectTimeouts[userId];
@@ -50,9 +55,6 @@ io.on('connection', (socket) => {
         if (!hostId || !players.includes(hostId)) hostId = players[0];
         
         emitPlayerList();
-        if (gameState !== "LOBBY") {
-            socket.emit('rejoinState', { gameState, currentWords, currentClue, currentDrawerId, currentRound, totalRounds, drawerName: playerNames[currentDrawerId] });
-        }
     });
 
     socket.on('requestStart', (data) => {
@@ -145,22 +147,17 @@ io.on('connection', (socket) => {
         const uId = socketToUserId[socket.id];
         if (uId) {
             disconnectTimeouts[uId] = setTimeout(() => {
-                // حذف البيانات من السيرفر
                 players = players.filter(id => id !== uId);
                 delete playerNames[uId];
                 delete scores[uId];
-                
-                // أمر للمتصفح بحذف الهوية المخزنة
-                io.emit('sessionExpired', uId); 
-
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
                 emitPlayerList();
                 delete disconnectTimeouts[uId];
-            }, 60000); // 60 ثانية
+            }, 60000); // مهلة 60 ثانية قبل الحذف
             delete socketToUserId[socket.id];
         }
     });
 });
 
-server.listen(3000, () => console.log('Server: http://localhost:3000'));
+server.listen(3000, () => console.log('Server running on http://localhost:3000'));
