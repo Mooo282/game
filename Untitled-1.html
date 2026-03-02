@@ -2,20 +2,27 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗</title>
+    <title>لعبة الرابط العجيب🔗 - Dark Mode</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f4f8; text-align: center; padding: 10px; margin: 0; }
-        .box { background: white; max-width: 800px; margin: 20px auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #000; color: #fff; text-align: center; padding: 10px; margin: 0; }
+        .box { background: #111; max-width: 800px; margin: 20px auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid #333; }
+        #player-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; padding: 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #444; }
+        .p-tag { background: #222; padding: 8px 15px; border-radius: 20px; border: 1px solid #555; font-weight: bold; font-size: 0.9em; }
+        .p-tag.is-me { border-color: #2563eb; background: #0f172a; }
+        h1 { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        #timer { font-size: 3em; color: #ff4d4d; font-weight: 900; }
+        #clue-display { font-size: 2em; color: #fb923c; margin: 15px 0; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
+        .card { padding: 15px; border: 2px solid #333; border-radius: 12px; cursor: pointer; font-weight: bold; background: #1a1a1a; color: #ccc; min-height: 50px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .card:hover { border-color: #555; background: #222; }
+        .card.selected { background: #ca8a04; border-color: #facc15; color: white; transform: translateY(-3px); }
+        .card.correct-answer { background: #16a34a !important; color: white !important; border-color: #22c55e !important; }
+        input[type="text"] { background: #222; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; text-align: center; }
+        button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #1d4ed8; }
         .hidden { display: none !important; }
-        .p-tag { background: white; padding: 6px 12px; border-radius: 20px; border: 1px solid #cbd5e1; font-weight: bold; margin: 5px; display: inline-block; }
-        .is-me { border-color: #2563eb; background: #eff6ff; }
-        #timer { font-size: 2.5em; color: #ef4444; font-weight: 900; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 50px; transition: 0.2s; }
-        .selected { background: #fbbf24; border-color: #d97706; transform: translateY(-2px); }
-        .correct-answer { background: #22c55e !important; color: white !important; }
-        button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #status { color: #888; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -24,39 +31,38 @@
     <div id="player-bar" class="hidden"></div>
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; border-radius:8px; border:1px solid #ccc;">
+        <input type="text" id="nick" placeholder="اكتب اسمك...">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
+
     <div id="lobby-screen" class="hidden">
-        <h2 id="wait-msg">بانتظار المضيف لضبط الجولات...</h2>
+        <h2>بانتظار المضيف...</h2>
         <div id="host-controls" class="hidden">
-            <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
-            <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
+            <select id="rounds-count" style="background:#222; color:white; padding:5px;"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
+            <br><br><button onclick="startGame()">ابدأ الآن 🚀</button>
         </div>
     </div>
+
     <div id="game-screen" class="hidden">
         <div id="timer">60</div>
-        <div id="status" style="font-weight:bold; margin-bottom:10px;"></div>
-        <div id="clue-display" style="font-size:1.8em; color:#ea580c; margin:10px 0;"></div>
+        <div id="status"></div>
+        <div id="clue-display"></div>
         <div class="grid" id="grid"></div>
         <div id="controls">
-            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميحك..."><button onclick="sendAction('submitClue')">إرسال (اختر 2)</button></div>
-            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">إرسال تضليل (اختر 2)</button></div>
-            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت (اختر 2)</button></div>
+            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميحك..."><button onclick="sendAction('submitClue')">إرسال (2)</button></div>
+            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')" style="background:#9333ea;">تضليل (2)</button></div>
+            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')" style="background:#16a34a;">تصويت (2)</button></div>
         </div>
     </div>
 </div>
 
 <script>
-    // نظام التدمير الذاتي للهوية (60 ثانية غياب)
+    // نظام الحذف التلقائي للهوية (60 ثانية غياب)
     if (localStorage.getItem('last_seen_time') && (Date.now() - parseInt(localStorage.getItem('last_seen_time')) > 60000)) {
         localStorage.clear();
     }
-
     let myId = localStorage.getItem('game_user_id') || ('u_' + Math.random().toString(36).substr(2, 9));
     localStorage.setItem('game_user_id', myId);
-
-    // تحديث وقت الوجود كل 5 ثوانٍ
     setInterval(() => { localStorage.setItem('last_seen_time', Date.now()); }, 5000);
 
     const socket = io();
@@ -73,8 +79,7 @@
     };
 
     function join() {
-        const n = document.getElementById('nick').value;
-        if(!n) return alert("الاسم مطلوب");
+        const n = document.getElementById('nick').value; if(!n) return alert("الاسم مطلوب");
         localStorage.setItem('game_user_name', n);
         localStorage.setItem('last_seen_time', Date.now());
         socket.emit('joinGame', { userId: myId, name: n });
@@ -83,9 +88,7 @@
         document.getElementById('lobby-screen').classList.remove('hidden');
     }
 
-    function startGame() {
-        socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value });
-    }
+    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
 
     socket.on('updatePlayerList', d => {
         const bar = document.getElementById('player-bar'); bar.innerHTML = "";
@@ -94,7 +97,7 @@
         d.players.forEach(id => {
             const tag = document.createElement('div');
             tag.className = `p-tag ${id === myId ? 'is-me' : ''}`;
-            tag.innerText = d.playerNames[id] + (id === d.hostId ? " (مضيف)" : "");
+            tag.innerText = d.playerNames[id] + (id === d.hostId ? " 👑" : "");
             bar.appendChild(tag);
         });
     });
@@ -104,7 +107,7 @@
     socket.on('roundStarted', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
-        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك!" : `تخمين من: ${d.drawerName}`;
+        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك الآن!" : `المختار: ${d.drawerName}`;
         document.getElementById('draw-ctrl').className = (myId === d.drawerId) ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";

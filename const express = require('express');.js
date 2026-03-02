@@ -123,7 +123,7 @@ io.on('connection', (socket) => {
                 scores[currentDrawerId] += 5;
             } else {
                 for (let fId in fakeWords) {
-                    // نظام مكافحة الغش: المضلل لا يأخذ نقاط إذا خدع نفسه بصوته
+                    // منع التحايل: لا نقاط إذا صوت اللاعب لتضليله الخاص
                     if (fId !== voterId && JSON.stringify(vote.sort()) === JSON.stringify(fakeWords[fId].sort())) {
                         scores[fId] += 7;
                     }
@@ -155,4 +155,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server online on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server Live on port ${PORT}`));
