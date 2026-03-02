@@ -36,24 +36,15 @@ function startTimer(duration, onTimeout) {
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
-        
-        // التحقق: هل اللاعب يحاول العودة لجلسة حذفها السيرفر؟
-        if (data.isReturning && !playerNames[userId]) {
-            return socket.emit('sessionExpired');
-        }
-
         if (disconnectTimeouts[userId]) {
             clearTimeout(disconnectTimeouts[userId]);
             delete disconnectTimeouts[userId];
         }
-
         socketToUserId[socket.id] = userId;
         if (data.name) playerNames[userId] = data.name;
         if (scores[userId] === undefined) scores[userId] = 0;
-        
         if (!players.includes(userId)) players.push(userId);
         if (!hostId || !players.includes(hostId)) hostId = players[0];
-        
         emitPlayerList();
     });
 
@@ -151,13 +142,12 @@ io.on('connection', (socket) => {
                 delete playerNames[uId];
                 delete scores[uId];
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
-                if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
                 emitPlayerList();
                 delete disconnectTimeouts[uId];
-            }, 60000); // مهلة 60 ثانية قبل الحذف
+            }, 60000);
             delete socketToUserId[socket.id];
         }
     });
 });
 
-server.listen(3000, () => console.log('Server running on http://localhost:3000'));
+server.listen(3000, () => console.log('Server is online: http://localhost:3000'));
