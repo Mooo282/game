@@ -12,8 +12,8 @@
         .is-me { border-color: #2563eb; background: #eff6ff; }
         #timer { font-size: 2.5em; color: #ef4444; font-weight: 900; }
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
-        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; }
-        .selected { background: #fbbf24; border-color: #d97706; }
+        .card { padding: 15px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; font-weight: bold; background: #fff; display: flex; align-items: center; justify-content: center; min-height: 50px; transition: 0.2s; }
+        .selected { background: #fbbf24; border-color: #d97706; transform: translateY(-2px); }
         .correct-answer { background: #22c55e !important; color: white !important; }
         button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
     </style>
@@ -24,11 +24,11 @@
     <div id="player-bar" class="hidden"></div>
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px;">
+        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; border-radius:8px; border:1px solid #ccc;">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
     <div id="lobby-screen" class="hidden">
-        <h2 id="wait-msg">بانتظار المضيف...</h2>
+        <h2 id="wait-msg">بانتظار المضيف لضبط الجولات...</h2>
         <div id="host-controls" class="hidden">
             <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
             <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
@@ -36,34 +36,28 @@
     </div>
     <div id="game-screen" class="hidden">
         <div id="timer">60</div>
-        <div id="status" style="font-weight:bold;"></div>
-        <div id="clue-display" style="font-size:1.8em; color:#ea580c;"></div>
+        <div id="status" style="font-weight:bold; margin-bottom:10px;"></div>
+        <div id="clue-display" style="font-size:1.8em; color:#ea580c; margin:10px 0;"></div>
         <div class="grid" id="grid"></div>
         <div id="controls">
-            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميح..."><button onclick="sendAction('submitClue')">إرسال (2)</button></div>
-            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">تضليل (2)</button></div>
-            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت (2)</button></div>
+            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميحك..."><button onclick="sendAction('submitClue')">إرسال (اختر 2)</button></div>
+            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">إرسال تضليل (اختر 2)</button></div>
+            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت (اختر 2)</button></div>
         </div>
     </div>
 </div>
 
 <script>
-    // --- كود الانتحار الذاتي القسري ---
-    const SESSION_TIMEOUT = 60000; // 60 ثانية
-    let lastSeen = localStorage.getItem('last_seen_time');
-    
-    if (lastSeen && (Date.now() - parseInt(lastSeen) > SESSION_TIMEOUT)) {
-        localStorage.clear(); 
-        console.log("تم تصفير المتصفح بسبب الغياب.");
+    // نظام التدمير الذاتي للهوية (60 ثانية غياب)
+    if (localStorage.getItem('last_seen_time') && (Date.now() - parseInt(localStorage.getItem('last_seen_time')) > 60000)) {
+        localStorage.clear();
     }
 
     let myId = localStorage.getItem('game_user_id') || ('u_' + Math.random().toString(36).substr(2, 9));
     localStorage.setItem('game_user_id', myId);
 
-    setInterval(() => {
-        localStorage.setItem('last_seen_time', Date.now());
-    }, 5000);
-    // ---------------------------------
+    // تحديث وقت الوجود كل 5 ثوانٍ
+    setInterval(() => { localStorage.setItem('last_seen_time', Date.now()); }, 5000);
 
     const socket = io();
     let isHost = false, selected = [];

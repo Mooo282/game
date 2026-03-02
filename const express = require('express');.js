@@ -44,7 +44,7 @@ io.on('connection', (socket) => {
         if (data.name) playerNames[userId] = data.name;
         if (scores[userId] === undefined) scores[userId] = 0;
         if (!players.includes(userId)) players.push(userId);
-        if (!hostId || !players.includes(hostId)) hostId = userId; // تعديل بسيط لضمان اول لاعب هو الهوست
+        if (!hostId || !players.includes(hostId)) hostId = userId;
         emitPlayerList();
     });
 
@@ -116,10 +116,14 @@ io.on('connection', (socket) => {
     function calculateScores() {
         for (let voterId in votes) {
             const vote = votes[voterId];
-            if (JSON.stringify(vote.sort()) === JSON.stringify(correctWords.sort())) {
-                scores[voterId] += 10; scores[currentDrawerId] += 5;
+            const isCorrect = JSON.stringify(vote.sort()) === JSON.stringify(correctWords.sort());
+            
+            if (isCorrect) {
+                scores[voterId] += 10;
+                scores[currentDrawerId] += 5;
             } else {
                 for (let fId in fakeWords) {
+                    // نظام مكافحة الغش: المضلل لا يأخذ نقاط إذا خدع نفسه بصوته
                     if (fId !== voterId && JSON.stringify(vote.sort()) === JSON.stringify(fakeWords[fId].sort())) {
                         scores[fId] += 7;
                     }
@@ -151,4 +155,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server online on port ${PORT}`));
