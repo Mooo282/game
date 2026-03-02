@@ -6,6 +6,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// قائمة الكلمات المقترحة
 const allWords = ["نسر", "غراب", "بطارية", "سفاح", "ساطور", "نووي", "بلح", "زعتر", "شجرة", "مربع", "ستوديو", "عش", "حديد", "تكييف", "دماغ", "ضوضاء", "دخان", "قرص", "مايك", "حذاء", "طماطم", "سفنجة", "تصحيح", "سلاح", "اذاعة", "كيكة", "درع", "محتوى", "سوداوية", "عدمية", "هرجلة", "ايمان", "علاج", "تشفير", "كاسورة", "سيخ", "كديس", "كلب", "زريبة", "راية", "فيل", "مخرج", "احلام", "كهرباء", "الخلا", "ذهب", "اسفلت", "العالم", "السبيل", "نار", "مركب", "خازوق", "شبكة"];
 
 let players = [], scores = {}, playerNames = {}, hostId = null;
@@ -14,7 +15,7 @@ let fakeWords = {}, votes = {}, guessesReceived = 0, timer, timeLeft = 60;
 let gameState = "LOBBY", currentWords = [], currentClue = "";
 let socketToUserId = {};
 let drawerQueue = [];
-let bannedUsers = new Set();
+let disconnectTimeouts = {}; // مخزن مهلة الـ 60 ثانية
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
@@ -36,16 +37,31 @@ function startTimer(duration, onTimeout) {
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
-        if (bannedUsers.has(userId)) return socket.emit('banned');
         
+        // إذا عاد اللاعب قبل انتهاء الـ 60 ثانية، نلغي عملية حذفه
+        if (disconnectTimeouts[userId]) {
+            clearTimeout(disconnectTimeouts[userId]);
+            delete disconnectTimeouts[userId];
+        }
+
         socketToUserId[socket.id] = userId;
-        playerNames[userId] = data.name;
-        if (!scores[userId]) scores[userId] = 0;
+        
+        // تحديث الاسم دائماً بالمدخل الجديد أو القديم
+        if (data.name) playerNames[userId] = data.name;
+        if (scores[userId] === undefined) scores[userId] = 0;
         
         if (!players.includes(userId)) players.push(userId);
         if (!hostId || !players.includes(hostId)) hostId = players[0];
         
         emitPlayerList();
+        
+        // إذا كانت اللعبة جارية، نرسل للاعب العائد حالة اللعبة الحالية
+        if (gameState !== "LOBBY") {
+            socket.emit('rejoinState', { 
+                gameState, currentWords, currentClue, currentDrawerId, 
+                currentRound, totalRounds, drawerName: playerNames[currentDrawerId] 
+            });
+        }
     });
 
     socket.on('requestStart', (data) => {
@@ -82,7 +98,7 @@ io.on('connection', (socket) => {
     socket.on('submitClue', (data) => {
         if (socketToUserId[socket.id] !== currentDrawerId || gameState !== "DRAWING") return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
-        io.emit('showClue', { clue: currentClue, allWords: currentWords });
+        io.emit('showClue', { clue: currentClue, allWords: currentWords, drawerId: currentDrawerId });
         startTimer(60, () => proceedToVoting());
     });
 
@@ -99,7 +115,7 @@ io.on('connection', (socket) => {
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
-        io.emit('startVoting', { options: votingOptions });
+        io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
         startTimer(45, () => finalizeRound());
     }
 
@@ -145,12 +161,19 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         if (uId) {
-            players = players.filter(id => id !== uId);
-            if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
-            if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
-            emitPlayerList();
+            // ننتظر 60 ثانية قبل الحذف النهائي
+            disconnectTimeouts[uId] = setTimeout(() => {
+                players = players.filter(id => id !== uId);
+                delete playerNames[uId];
+                delete scores[uId];
+                if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
+                if (uId === currentDrawerId && gameState !== "LOBBY") startNewRound();
+                emitPlayerList();
+                delete disconnectTimeouts[uId];
+            }, 60000);
+            delete socketToUserId[socket.id];
         }
     });
 });
 
-server.listen(3000, () => console.log('Server running on http://localhost:3000'));
+server.listen(3000, () => console.log('Server is running on http://localhost:3000'));
