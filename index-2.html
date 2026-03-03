@@ -2,27 +2,27 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗 - Dark Mode</title>
+    <title>لعبة الروابط 🔗 - Black Edition</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #000; color: #fff; text-align: center; padding: 10px; margin: 0; }
         .box { background: #111; max-width: 800px; margin: 20px auto; padding: 25px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border: 1px solid #333; }
         #player-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; padding: 10px; background: #1a1a1a; border-radius: 15px; border: 1px solid #444; }
-        .p-tag { background: #222; padding: 8px 15px; border-radius: 20px; border: 1px solid #555; font-weight: bold; font-size: 0.9em; }
-        .p-tag.is-me { border-color: #2563eb; background: #0f172a; }
-        h1 { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .p-tag { background: #222; padding: 8px 15px; border-radius: 20px; border: 1px solid #555; font-weight: bold; font-size: 0.9em; color: #eee; }
+        .p-tag.is-me { border-color: #2563eb; background: #0f172a; color: #fff; }
+        h1 { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.1); }
         #timer { font-size: 3em; color: #ff4d4d; font-weight: 900; }
-        #clue-display { font-size: 2em; color: #fb923c; margin: 15px 0; font-weight: bold; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-        .card { padding: 15px; border: 2px solid #333; border-radius: 12px; cursor: pointer; font-weight: bold; background: #1a1a1a; color: #ccc; min-height: 50px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        #clue-display { font-size: 2.2em; color: #fb923c; margin: 15px 0; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+        .card { padding: 18px; border: 2px solid #333; border-radius: 12px; cursor: pointer; font-weight: bold; background: #1a1a1a; color: #ccc; display: flex; align-items: center; justify-content: center; min-height: 60px; transition: 0.2s; font-size: 1.1em; }
         .card:hover { border-color: #555; background: #222; }
-        .card.selected { background: #ca8a04; border-color: #facc15; color: white; transform: translateY(-3px); }
+        .card.selected { background: #ca8a04; border-color: #facc15; color: white; transform: scale(1.02); }
         .card.correct-answer { background: #16a34a !important; color: white !important; border-color: #22c55e !important; }
-        input[type="text"] { background: #222; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; text-align: center; }
-        button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        button:hover { background: #1d4ed8; }
+        input[type="text"] { background: #222; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; text-align: center; font-size: 1em; width: 220px; }
+        button { background: #2563eb; color: white; border: none; padding: 12px 28px; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #1d4ed8; transform: translateY(-2px); }
         .hidden { display: none !important; }
-        #status { color: #888; font-size: 0.9em; }
+        #status { color: #888; font-size: 0.95em; margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -31,15 +31,18 @@
     <div id="player-bar" class="hidden"></div>
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك...">
+        <input type="text" id="nick" placeholder="اكتب اسمك المستعار...">
         <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
 
     <div id="lobby-screen" class="hidden">
-        <h2>بانتظار المضيف...</h2>
+        <h2>بانتظار المضيف لضبط الجولات...</h2>
         <div id="host-controls" class="hidden">
-            <select id="rounds-count" style="background:#222; color:white; padding:5px;"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
-            <br><br><button onclick="startGame()">ابدأ الآن 🚀</button>
+            <select id="rounds-count" style="background:#222; color:white; padding:8px; border-radius:5px; border:1px solid #444;">
+                <option value="5">5 جولات</option>
+                <option value="10">10 جولات</option>
+            </select>
+            <br><br><button onclick="startGame()">ابدأ الجولة الآن 🚀</button>
         </div>
     </div>
 
@@ -49,15 +52,22 @@
         <div id="clue-display"></div>
         <div class="grid" id="grid"></div>
         <div id="controls">
-            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="تلميحك..."><button onclick="sendAction('submitClue')">إرسال (2)</button></div>
-            <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')" style="background:#9333ea;">تضليل (2)</button></div>
-            <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')" style="background:#16a34a;">تصويت (2)</button></div>
+            <div id="draw-ctrl" class="hidden">
+                <input type="text" id="clue-in" placeholder="اكتب تلميحك هنا...">
+                <button onclick="sendAction('submitClue')">إرسال (اختر 2)</button>
+            </div>
+            <div id="fake-ctrl" class="hidden">
+                <button onclick="sendAction('submitFake')" style="background:#9333ea;">إرسال تضليل (اختر 2)</button>
+            </div>
+            <div id="vote-ctrl" class="hidden">
+                <button onclick="sendAction('submitVote')" style="background:#16a34a;">تصويت نهائي (اختر 2)</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-    // نظام الحذف التلقائي للهوية (60 ثانية غياب)
+    // --- تدمير الهوية الذكي (60 ثانية غياب) ---
     if (localStorage.getItem('last_seen_time') && (Date.now() - parseInt(localStorage.getItem('last_seen_time')) > 60000)) {
         localStorage.clear();
     }
@@ -79,7 +89,8 @@
     };
 
     function join() {
-        const n = document.getElementById('nick').value; if(!n) return alert("الاسم مطلوب");
+        const n = document.getElementById('nick').value; 
+        if(!n) return alert("من فضلك اكتب اسمك");
         localStorage.setItem('game_user_name', n);
         localStorage.setItem('last_seen_time', Date.now());
         socket.emit('joinGame', { userId: myId, name: n });
@@ -88,7 +99,9 @@
         document.getElementById('lobby-screen').classList.remove('hidden');
     }
 
-    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
+    function startGame() {
+        socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value });
+    }
 
     socket.on('updatePlayerList', d => {
         const bar = document.getElementById('player-bar'); bar.innerHTML = "";
@@ -107,7 +120,7 @@
     socket.on('roundStarted', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
-        document.getElementById('status').innerText = (myId === d.drawerId) ? "دورك الآن!" : `المختار: ${d.drawerName}`;
+        document.getElementById('status').innerText = (myId === d.drawerId) ? "أنت المختار! اختر كلمتين وضع تلميحاً." : `المختار: ${d.drawerName}`;
         document.getElementById('draw-ctrl').className = (myId === d.drawerId) ? "" : "hidden";
         document.getElementById('fake-ctrl').className = "hidden";
         document.getElementById('vote-ctrl').className = "hidden";

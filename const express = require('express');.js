@@ -16,7 +16,10 @@ let socketToUserId = {};
 let drawerQueue = [];
 let disconnectTimeouts = {}; 
 
-app.get('/', (req, res) => res.sendFile(__dirname + '/index-2.html'));
+// --- التعديل هنا ليتوافق مع اسم ملفك ---
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index-2.html');
+});
 
 function emitPlayerList() {
     io.emit('updatePlayerList', { players, playerNames, hostId });
@@ -117,13 +120,12 @@ io.on('connection', (socket) => {
         for (let voterId in votes) {
             const vote = votes[voterId];
             const isCorrect = JSON.stringify(vote.sort()) === JSON.stringify(correctWords.sort());
-            
             if (isCorrect) {
                 scores[voterId] += 10;
                 scores[currentDrawerId] += 5;
             } else {
                 for (let fId in fakeWords) {
-                    // منع التحايل: لا نقاط إذا صوت اللاعب لتضليله الخاص
+                    // منع الغش: المضلل لا يأخذ نقاط إذا خدع نفسه بصوته
                     if (fId !== voterId && JSON.stringify(vote.sort()) === JSON.stringify(fakeWords[fId].sort())) {
                         scores[fId] += 7;
                     }
@@ -145,7 +147,7 @@ io.on('connection', (socket) => {
                 players = players.filter(id => id !== uId);
                 delete playerNames[uId];
                 delete scores[uId];
-                if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
+                if (uId === hostId) hostId = players.length > 0 ? players : null;
                 emitPlayerList();
                 delete disconnectTimeouts[uId];
             }, 60000);
@@ -155,4 +157,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server Live on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server Online on port ${PORT}`));
