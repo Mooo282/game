@@ -25,23 +25,27 @@ function emitPlayerList() {
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const uId = data.userId;
-        
-        
-        if (disconnectTimeouts[uId]) {
-            clearTimeout(disconnectTimeouts[uId]);
-            delete disconnectTimeouts[uId];
-        }
+        if (disconnectTimeouts[uId]) { clearTimeout(disconnectTimeouts[uId]); delete disconnectTimeouts[uId]; }
 
         socketToUserId[socket.id] = uId;
         playerNames[uId] = data.name;
-        
-        
         if (scores[uId] === undefined) scores[uId] = 0;
-        
         if (!players.includes(uId)) players.push(uId);
         if (!hostId || !players.includes(hostId)) hostId = uId;
         
         emitPlayerList();
+
+        
+        if (gameState !== "LOBBY") {
+            socket.emit('syncGameState', {
+                gameState: gameState,
+                words: currentWords,
+                clue: currentClue,
+                drawerId: currentDrawerId,
+                drawerName: playerNames[currentDrawerId],
+                timeLeft: timeLeft
+            });
+        }
     });
 
     socket.on('kickPlayer', (targetId) => {
@@ -76,7 +80,6 @@ io.on('connection', (socket) => {
 
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
         io.emit('roundStarted', { words: currentWords, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId], currentRound, totalRounds });
-        
         
         clearInterval(timer);
         timeLeft = 60;
@@ -152,12 +155,10 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         if (uId) {
-            
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
-                delete playerNames[uId];
-                delete scores[uId];
-                if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
+                delete playerNames[uId]; delete scores[uId];
+                if (uId === hostId) hostId = players.length > 0 ? players : null;
                 emitPlayerList();
             }, 60000);
             delete socketToUserId[socket.id];
@@ -166,4 +167,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Live on ${PORT}`));
+server.listen(PORT, () => console.log(`Server started on ${PORT}`));
