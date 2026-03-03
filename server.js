@@ -16,10 +16,7 @@ let socketToUserId = {};
 let drawerQueue = [];
 let disconnectTimeouts = {}; 
 
-// --- التعديل هنا ليتوافق مع اسم ملفك ---
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
+app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
 function emitPlayerList() {
     io.emit('updatePlayerList', { players, playerNames, hostId });
@@ -39,16 +36,24 @@ function startTimer(duration, onTimeout) {
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const userId = data.userId;
-        if (disconnectTimeouts[userId]) {
-            clearTimeout(disconnectTimeouts[userId]);
-            delete disconnectTimeouts[userId];
-        }
+        if (disconnectTimeouts[userId]) { clearTimeout(disconnectTimeouts[userId]); delete disconnectTimeouts[userId]; }
         socketToUserId[socket.id] = userId;
         if (data.name) playerNames[userId] = data.name;
         if (scores[userId] === undefined) scores[userId] = 0;
         if (!players.includes(userId)) players.push(userId);
         if (!hostId || !players.includes(hostId)) hostId = userId;
         emitPlayerList();
+    });
+
+    
+    socket.on('kickPlayer', (targetId) => {
+        if (socketToUserId[socket.id] === hostId && targetId !== hostId) {
+            const targetSocketId = Object.keys(socketToUserId).find(key => socketToUserId[key] === targetId);
+            if (targetSocketId) {
+                io.to(targetSocketId).emit('youAreKicked');
+                io.sockets.sockets.get(targetSocketId).disconnect();
+            }
+        }
     });
 
     socket.on('requestStart', (data) => {
@@ -75,9 +80,9 @@ io.on('connection', (socket) => {
     }
 
     socket.on('submitClue', (data) => {
-        if (socketToUserId[socket.id] !== currentDrawerId || gameState !== "DRAWING") return;
+        if (socketToUserId[socket.id] !== currentDrawerId || !data.clue.trim()) return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
-        io.emit('showClue', { clue: currentClue, allWords: currentWords, drawerId: currentDrawerId });
+        io.emit('showClue', { clue: currentClue, allWords: currentWords });
         startTimer(60, () => proceedToVoting());
     });
 
@@ -94,7 +99,7 @@ io.on('connection', (socket) => {
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
-        io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
+        io.emit('startVoting', { options: votingOptions });
         startTimer(45, () => finalizeRound());
     }
 
@@ -119,16 +124,11 @@ io.on('connection', (socket) => {
     function calculateScores() {
         for (let voterId in votes) {
             const vote = votes[voterId];
-            const isCorrect = JSON.stringify(vote.sort()) === JSON.stringify(correctWords.sort());
-            if (isCorrect) {
-                scores[voterId] += 10;
-                scores[currentDrawerId] += 5;
+            if (JSON.stringify(vote.sort()) === JSON.stringify(correctWords.sort())) {
+                scores[voterId] += 10; scores[currentDrawerId] += 5;
             } else {
                 for (let fId in fakeWords) {
-                    // منع الغش: المضلل لا يأخذ نقاط إذا خدع نفسه بصوته
-                    if (fId !== voterId && JSON.stringify(vote.sort()) === JSON.stringify(fakeWords[fId].sort())) {
-                        scores[fId] += 7;
-                    }
+                    if (fId !== voterId && JSON.stringify(vote.sort()) === JSON.stringify(fakeWords[fId].sort())) scores[fId] += 7;
                 }
             }
         }
@@ -145,11 +145,9 @@ io.on('connection', (socket) => {
         if (uId) {
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
-                delete playerNames[uId];
-                delete scores[uId];
-                if (uId === hostId) hostId = players.length > 0 ? players : null;
+                delete playerNames[uId]; delete scores[uId];
+                if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 emitPlayerList();
-                delete disconnectTimeouts[uId];
             }, 60000);
             delete socketToUserId[socket.id];
         }
@@ -157,4 +155,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server Online on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on ${PORT}`));
