@@ -16,7 +16,7 @@ let socketToUserId = {};
 let drawerQueue = [];
 let disconnectTimeouts = {}; 
 
-app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
+app.get('/', (req, res) => res.sendFile(__dirname + '/index-2.html'));
 
 function emitPlayerList() {
     io.emit('updatePlayerList', { players, playerNames, hostId });
