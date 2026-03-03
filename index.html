@@ -6,19 +6,42 @@
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #000; color: #fff; text-align: center; padding: 10px; margin: 0; }
-        .box { background: #111; max-width: 800px; margin: 20px auto; padding: 25px; border-radius: 20px; border: 1px solid #333; }
-        #player-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; background: #1a1a1a; padding: 10px; border-radius: 15px; }
-        .p-tag { background: #222; padding: 8px 15px; border-radius: 20px; border: 1px solid #444; font-weight: bold; position: relative; }
-        .kick-btn { position: absolute; top: -5px; right: -5px; background: red; color: white; border: none; border-radius: 50%; cursor: pointer; width: 18px; height: 18px; font-size: 10px; line-height: 1; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 20px 0; }
-        .card { padding: 15px; border: 2px solid #333; border-radius: 12px; cursor: pointer; background: #1a1a1a; color: #fff; font-weight: bold; transition: 0.2s; min-height: 50px; display: flex; align-items: center; justify-content: center; }
-        .selected { background: #ca8a04; border-color: #facc15; }
+        .box { background: #111; max-width: 800px; margin: 20px auto; padding: 25px; border-radius: 20px; border: 1px solid #333; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+        
+        /* شريط اللاعبين المطور */
+        #player-bar { 
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; 
+            margin-bottom: 20px; padding: 15px; background: rgba(26, 26, 26, 0.9); 
+            border-radius: 15px; border: 1px solid #444; backdrop-filter: blur(5px);
+        }
+        .p-tag { 
+            background: #222; padding: 6px 12px; border-radius: 12px; 
+            border: 1px solid #444; display: flex; align-items: center; gap: 10px; position: relative;
+        }
+        .p-tag.is-me { border-color: #2563eb; background: #0f172a; }
+        .p-score { 
+            background: #2563eb; color: white; padding: 2px 8px; 
+            border-radius: 8px; font-size: 0.85em; font-weight: 900; 
+        }
+        .kick-btn { 
+            position: absolute; top: -5px; right: -5px; background: #ef4444; 
+            color: white; border: none; border-radius: 50%; cursor: pointer; 
+            width: 18px; height: 18px; font-size: 10px; display: flex; align-items: center; justify-content: center;
+        }
+
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0; }
+        .card { 
+            padding: 18px; border: 2px solid #333; border-radius: 12px; cursor: pointer; 
+            background: #1a1a1a; color: #fff; font-weight: bold; transition: 0.2s; min-height: 50px; 
+            display: flex; align-items: center; justify-content: center; font-size: 1.1em;
+        }
+        .selected { background: #ca8a04; border-color: #facc15; transform: scale(1.02); }
         .correct-answer { background: #16a34a !important; border-color: #22c55e !important; }
         .hidden { display: none !important; }
         #timer { font-size: 3em; color: #ff4d4d; font-weight: 900; }
-        #clue-display { font-size: 1.8em; color: #fb923c; margin: 15px 0; min-height: 1.5em; font-weight: bold; }
-        button { background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        #leaderboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        #clue-display { font-size: 2.2em; color: #fb923c; margin: 15px 0; min-height: 1.2em; font-weight: bold; }
+        button { background: #2563eb; color: white; border: none; padding: 12px 28px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #leaderboard-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 2000; }
     </style>
 </head>
 <body>
@@ -28,15 +51,15 @@
     
     <div id="name-screen">
         <h1>لعبة الروابط 🔗</h1>
-        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:10px; background:#222; color:#fff; border:1px solid #444; border-radius:8px;">
-        <br><br><button onclick="join()">دخول</button>
+        <input type="text" id="nick" placeholder="اكتب اسمك..." style="padding:12px; background:#222; color:#fff; border:1px solid #444; border-radius:8px; width:200px; text-align:center;">
+        <br><br><button onclick="join()">دخول اللعبة</button>
     </div>
 
     <div id="lobby-screen" class="hidden">
-        <h2>بانتظار المضيف...</h2>
+        <h2>بانتظار المضيف لضبط الجولات...</h2>
         <div id="host-controls" class="hidden">
-            <select id="rounds-count" style="background:#222; color:#fff; padding:5px;"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
-            <br><br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
+            <select id="rounds-count" style="background:#222; color:#fff; padding:8px; border-radius:5px;"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
+            <br><br><button onclick="startGame()">ابدأ الجولة 🚀</button>
         </div>
     </div>
 
@@ -45,7 +68,10 @@
         <div id="clue-display"></div>
         <div class="grid" id="grid"></div>
         <div id="controls">
-            <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط هنا..."><button onclick="sendAction('submitClue')">إرسال</button></div>
+            <div id="draw-ctrl" class="hidden">
+                <input type="text" id="clue-in" placeholder="اكتب التلميح..." style="padding:10px; background:#222; color:#fff; border:1px solid #444; border-radius:8px;">
+                <button onclick="sendAction('submitClue')">إرسال (اختر 2)</button>
+            </div>
             <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')" style="background:#9333ea;">تضليل (2)</button></div>
             <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')" style="background:#16a34a;">تصويت نهائي (2)</button></div>
         </div>
@@ -53,15 +79,15 @@
 </div>
 
 <div id="leaderboard-overlay" class="hidden">
-    <div style="background:#111; padding:30px; border-radius:20px; border:1px solid #2563eb; width:280px;">
-        <h2>النتائج النهائية 🏆</h2>
-        <div id="final-list" style="margin:20px 0; font-size: 1.2em;"></div>
+    <div style="background:#111; padding:40px; border-radius:20px; border:2px solid #2563eb; width:300px;">
+        <h2 style="color:#fb923c;">النتائج النهائية 🏆</h2>
+        <div id="final-list" style="margin:25px 0; font-size:1.3em;"></div>
         <button onclick="location.reload()">لعبة جديدة</button>
     </div>
 </div>
 
 <script>
-    // نظام الجلسة
+    // نظام الجلسة المستمرة
     let myId = localStorage.getItem('game_user_id');
     let lastSeen = localStorage.getItem('last_seen_time');
     if (lastSeen && (Date.now() - parseInt(lastSeen) > 60000)) { localStorage.clear(); myId = null; }
@@ -72,7 +98,7 @@
     let isHost = false, selected = [];
 
     function join() {
-        const n = document.getElementById('nick').value; if(!n) return;
+        const n = document.getElementById('nick').value; if(!n) return alert("الاسم مطلوب");
         localStorage.setItem('game_user_name', n);
         socket.emit('joinGame', { userId: myId, name: n });
         document.getElementById('name-screen').classList.add('hidden');
@@ -91,9 +117,20 @@
         const bar = document.getElementById('player-bar'); bar.innerHTML = "";
         isHost = (myId === d.hostId);
         if(isHost) document.getElementById('host-controls').classList.remove('hidden');
+        
         d.players.forEach(id => {
-            const tag = document.createElement('div'); tag.className = `p-tag`;
-            tag.innerText = d.playerNames[id] + (id === d.hostId ? " 👑" : "");
+            const tag = document.createElement('div'); tag.className = `p-tag ${id === myId ? 'is-me' : ''}`;
+            
+            const name = document.createElement('span'); 
+            name.innerText = d.playerNames[id] + (id === d.hostId ? " 👑" : "");
+            
+            const score = document.createElement('span'); 
+            score.className = "p-score";
+            score.innerText = d.scores[id] || 0;
+            
+            tag.appendChild(name);
+            tag.appendChild(score);
+
             if(isHost && id !== myId) {
                 const btn = document.createElement('button'); btn.className = 'kick-btn'; btn.innerText = "×";
                 btn.onclick = () => socket.emit('kickPlayer', id);
@@ -103,16 +140,12 @@
         });
     });
 
-    // مزامنة الدخول المتأخر
     socket.on('syncGameState', d => {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         if (d.clue) document.getElementById('clue-display').innerText = `الرابط: ${d.clue}`;
-        
-        // إظهار الأزرار بناءً على مرحلة اللعبة
         if (d.gameState === "FAKING" && myId !== d.drawerId) document.getElementById('fake-ctrl').classList.remove('hidden');
         if (d.gameState === "VOTING" && myId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
-        
         render(d.words, (myId === d.drawerId || d.gameState === "DRAWING"));
     });
 
@@ -146,7 +179,7 @@
 
     socket.on('gameOver', d => {
         document.getElementById('leaderboard-overlay').classList.remove('hidden');
-        document.getElementById('final-list').innerHTML = d.leaderboard.map(p => `<div>${p.name}: ${p.score}</div>`).join('');
+        document.getElementById('final-list').innerHTML = d.leaderboard.map(p => `<div style="margin-bottom:10px;">${p.name}: <span style="color:#2563eb;">${p.score}</span></div>`).join('');
     });
 
     socket.on('youAreKicked', () => { localStorage.clear(); location.reload(); });

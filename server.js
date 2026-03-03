@@ -19,7 +19,7 @@ let disconnectTimeouts = {};
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
 function emitPlayerList() {
-    io.emit('updatePlayerList', { players, playerNames, hostId });
+    io.emit('updatePlayerList', { players, playerNames, hostId, scores });
 }
 
 io.on('connection', (socket) => {
@@ -31,19 +31,19 @@ io.on('connection', (socket) => {
         playerNames[uId] = data.name;
         if (scores[uId] === undefined) scores[uId] = 0;
         if (!players.includes(uId)) players.push(uId);
-        if (!hostId || !players.includes(hostId)) hostId = uId;
+        
+        
+        if (!hostId || !Object.values(socketToUserId).includes(hostId)) {
+            hostId = uId;
+        }
         
         emitPlayerList();
 
-        
         if (gameState !== "LOBBY") {
             socket.emit('syncGameState', {
-                gameState: gameState,
-                words: currentWords,
-                clue: currentClue,
-                drawerId: currentDrawerId,
-                drawerName: playerNames[currentDrawerId],
-                timeLeft: timeLeft
+                gameState, words: currentWords, clue: currentClue,
+                drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId],
+                timeLeft
             });
         }
     });
@@ -108,7 +108,7 @@ io.on('connection', (socket) => {
     });
 
     function proceedToVoting() {
-        gameState = "VOTING"; guessesReceived = 0;
+        gameState = "VOTING";
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
@@ -126,6 +126,7 @@ io.on('connection', (socket) => {
     function finalizeRound() {
         gameState = "RESULTS";
         calculateScores();
+        emitPlayerList(); // تحديث شريط النقاط فوراً
         io.emit('roundFinished', { correctWords, scores, playerNames });
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); } 
@@ -155,10 +156,19 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         if (uId) {
+            
+            if (uId === hostId) {
+                const nextActiveId = Object.values(socketToUserId).find(id => id !== uId);
+                if (nextActiveId) {
+                    hostId = nextActiveId;
+                    emitPlayerList();
+                }
+            }
+
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
                 delete playerNames[uId]; delete scores[uId];
-                if (uId === hostId) hostId = players.length > 0 ? players : null;
+                if (players.length === 0) hostId = null;
                 emitPlayerList();
             }, 60000);
             delete socketToUserId[socket.id];
