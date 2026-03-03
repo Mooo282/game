@@ -22,36 +22,34 @@ function emitPlayerList() {
     io.emit('updatePlayerList', { players, playerNames, hostId });
 }
 
-function startTimer(duration, onTimeout) {
-    clearInterval(timer);
-    timeLeft = duration;
-    io.emit('timerUpdate', timeLeft);
-    timer = setInterval(() => {
-        timeLeft--;
-        io.emit('timerUpdate', timeLeft);
-        if (timeLeft <= 0) { clearInterval(timer); if (onTimeout) onTimeout(); }
-    }, 1000);
-}
-
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
-        const userId = data.userId;
-        if (disconnectTimeouts[userId]) { clearTimeout(disconnectTimeouts[userId]); delete disconnectTimeouts[userId]; }
-        socketToUserId[socket.id] = userId;
-        if (data.name) playerNames[userId] = data.name;
-        if (scores[userId] === undefined) scores[userId] = 0;
-        if (!players.includes(userId)) players.push(userId);
-        if (!hostId || !players.includes(hostId)) hostId = userId;
+        const uId = data.userId;
+        
+        
+        if (disconnectTimeouts[uId]) {
+            clearTimeout(disconnectTimeouts[uId]);
+            delete disconnectTimeouts[uId];
+        }
+
+        socketToUserId[socket.id] = uId;
+        playerNames[uId] = data.name;
+        
+        
+        if (scores[uId] === undefined) scores[uId] = 0;
+        
+        if (!players.includes(uId)) players.push(uId);
+        if (!hostId || !players.includes(hostId)) hostId = uId;
+        
         emitPlayerList();
     });
 
-    
     socket.on('kickPlayer', (targetId) => {
         if (socketToUserId[socket.id] === hostId && targetId !== hostId) {
-            const targetSocketId = Object.keys(socketToUserId).find(key => socketToUserId[key] === targetId);
-            if (targetSocketId) {
-                io.to(targetSocketId).emit('youAreKicked');
-                io.sockets.sockets.get(targetSocketId).disconnect();
+            const targetSid = Object.keys(socketToUserId).find(k => socketToUserId[k] === targetId);
+            if (targetSid) {
+                io.to(targetSid).emit('youAreKicked');
+                io.sockets.sockets.get(targetSid).disconnect();
             }
         }
     });
@@ -70,20 +68,32 @@ io.on('connection', (socket) => {
         gameState = "DRAWING"; guessesReceived = 0; fakeWords = {}; votes = {}; currentClue = "";
         if (drawerQueue.length === 0) drawerQueue = [...players].sort(() => 0.5 - Math.random());
         currentDrawerId = drawerQueue.shift();
+        
         if (!players.includes(currentDrawerId)) {
             if (players.length > 0) return startNewRound();
             return finishGame();
         }
+
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
         io.emit('roundStarted', { words: currentWords, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId], currentRound, totalRounds });
-        startTimer(60, () => { if (gameState === "DRAWING") startNewRound(); });
+        
+        
+        clearInterval(timer);
+        timeLeft = 60;
+        timer = setInterval(() => {
+            timeLeft--;
+            io.emit('timerUpdate', timeLeft);
+            if(timeLeft <= 0) { 
+                clearInterval(timer); 
+                if(gameState === "DRAWING") startNewRound(); 
+            }
+        }, 1000);
     }
 
     socket.on('submitClue', (data) => {
         if (socketToUserId[socket.id] !== currentDrawerId || !data.clue.trim()) return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
         io.emit('showClue', { clue: currentClue, allWords: currentWords });
-        startTimer(60, () => proceedToVoting());
     });
 
     socket.on('submitFake', (words) => {
@@ -95,12 +105,11 @@ io.on('connection', (socket) => {
     });
 
     function proceedToVoting() {
-        gameState = "VOTING"; clearInterval(timer); guessesReceived = 0;
+        gameState = "VOTING"; guessesReceived = 0;
         let options = [...correctWords];
         for (let id in fakeWords) options = options.concat(fakeWords[id]);
         let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
         io.emit('startVoting', { options: votingOptions });
-        startTimer(45, () => finalizeRound());
     }
 
     socket.on('submitVote', (votedWords) => {
@@ -112,7 +121,7 @@ io.on('connection', (socket) => {
     });
 
     function finalizeRound() {
-        gameState = "RESULTS"; clearInterval(timer);
+        gameState = "RESULTS";
         calculateScores();
         io.emit('roundFinished', { correctWords, scores, playerNames });
         setTimeout(() => {
@@ -143,9 +152,11 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const uId = socketToUserId[socket.id];
         if (uId) {
+            
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
-                delete playerNames[uId]; delete scores[uId];
+                delete playerNames[uId];
+                delete scores[uId];
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 emitPlayerList();
             }, 60000);
@@ -155,4 +166,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on ${PORT}`));
+server.listen(PORT, () => console.log(`Live on ${PORT}`));
