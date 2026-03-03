@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>لعبة الروابط 🔗 - Dark Mode</title>
+    <title>الرابط العجيب</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #000; color: #fff; text-align: center; padding: 10px; margin: 0; }
@@ -57,7 +57,7 @@
 </div>
 
 <script>
-    // نظام الحذف التلقائي للهوية (60 ثانية غياب)
+    
     if (localStorage.getItem('last_seen_time') && (Date.now() - parseInt(localStorage.getItem('last_seen_time')) > 60000)) {
         localStorage.clear();
     }
@@ -155,3 +155,4 @@
 </script>
 </body>
 </html>
+
