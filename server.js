@@ -53,7 +53,8 @@ io.on('connection', (socket) => {
 
     socket.on('requestStart', (data) => {
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
-            players.forEach(id => scores[id] = 0);
+            // تصفير النقاط عند بدء لعبة جديدة
+            players.forEach(id => scores[id] = 0); 
             totalRounds = parseInt(data.rounds) || 5;
             currentRound = 1; drawerQueue = [];
             startNewRound();
@@ -73,24 +74,26 @@ io.on('connection', (socket) => {
         currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
         io.emit('roundStarted', { words: currentWords, drawerId: currentDrawerId, drawerName: playerNames[currentDrawerId], currentRound, totalRounds });
         
-        // 60 ثانية للمرحلة الأولى
         startTimer(60, () => { if(gameState === "DRAWING") startNewRound(); });
     }
 
     socket.on('submitClue', (data) => {
-        if (socketToUserId[socket.id] !== currentDrawerId || !data.clue.trim()) return;
+        if (socketToUserId[socket.id] !== currentDrawerId || !data.clue || !data.clue.trim()) return;
         gameState = "FAKING"; correctWords = data.words; currentClue = data.clue;
         
-        // إرسال كلمات مختلفة لكل لاعب للتضليل
         players.forEach(pId => {
             if (pId !== currentDrawerId) {
                 const playerWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
                 const pSocketId = Object.keys(socketToUserId).find(k => socketToUserId[k] === pId);
-                if (pSocketId) io.to(pSocketId).emit('showClue', { clue: currentClue, pWords: playerWords });
+                // إرسال اسم المشفر مع التلميح
+                if (pSocketId) io.to(pSocketId).emit('showClue', { 
+                    clue: currentClue, 
+                    pWords: playerWords, 
+                    drawerName: playerNames[currentDrawerId] 
+                });
             }
         });
 
-        // 60 ثانية جديدة لمرحلة التضليل
         startTimer(60, () => proceedToVoting());
     });
 
@@ -109,7 +112,6 @@ io.on('connection', (socket) => {
         let votingOptions = [...new Set(options)].sort(() => 0.5 - Math.random());
         io.emit('startVoting', { options: votingOptions, drawerId: currentDrawerId });
         
-        // 60 ثانية جديدة لمرحلة التصويت
         startTimer(60, () => finalizeRound());
     }
 
@@ -123,11 +125,21 @@ io.on('connection', (socket) => {
 
     function finalizeRound() {
         gameState = "RESULTS"; calculateScores(); emitPlayerList();
-        io.emit('roundFinished', { correctWords, scores, playerNames });
+        
+        // تجهيز بيانات المصوتين
+        let voteDetails = {};
+        for (let vId in votes) {
+            const voteStr = votes[vId].sort().join(" + ");
+            if (!voteDetails[voteStr]) voteDetails[voteStr] = [];
+            voteDetails[voteStr].push(playerNames[vId]);
+        }
+
+        io.emit('roundFinished', { correctWords, scores, playerNames, voteDetails });
+        
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); } 
             else { finishGame(); }
-        }, 5000);
+        }, 8000); 
     }
 
     function calculateScores() {
@@ -168,3 +180,4 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server Online on port ${PORT}`));
+
