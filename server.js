@@ -46,7 +46,7 @@ io.on('connection', (socket) => {
         if (scores[uId] === undefined) scores[uId] = 0;
         if (!players.includes(uId)) players.push(uId);
         
-        // تعيين المضيف: فقط إذا لم يكن هناك مضيف حالي موجود في اللعبة
+        
         if (!hostId || !players.includes(hostId)) hostId = uId;
         
         emitPlayerList();
@@ -67,7 +67,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('requestStart', (data) => {
-        // حماية: لا يمكن بدء لعبة إلا إذا كنا في اللوبي
+        
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
             players.forEach(id => scores[id] = 0); 
             totalRounds = parseInt(data.rounds) || 5;
@@ -172,7 +172,7 @@ io.on('connection', (socket) => {
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 delete playerNames[uId]; delete scores[uId];
                 emitPlayerList();
-            }, 10000); // تقليل مهلة الانقطاع لسرعة الاستجابة
+            }, 10000); 
             delete socketToUserId[socket.id];
         }
     });
@@ -180,4 +180,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server Online on port ${PORT}`));
+
 
