@@ -57,6 +57,17 @@ io.on('connection', (socket) => {
         emitPlayerList();
     });
 
+    socket.on('sendChat', (msg) => {
+        const uId = socketToUserId[socket.id];
+        if (msg && msg.trim()) {
+            io.emit('newChat', {
+                sender: playerNames[uId],
+                text: msg,
+                color: uId === currentDrawerId ? "#f59e0b" : "#6366f1"
+            });
+        }
+    });
+
     socket.on('requestStart', (data) => {
         if (socketToUserId[socket.id] === hostId && gameState === "LOBBY") {
             players.forEach(id => scores[id] = 0); 
@@ -82,14 +93,13 @@ io.on('connection', (socket) => {
     }
 
     socket.on('submitClue', (data) => {
-        if (socketToUserId[socket.id] !== currentDrawerId || !data.clue || !data.clue.trim()) return;
+        if (socketToUserId[socket.id] !== currentDrawerId || !data.clue) return;
         gameState = "FAKING"; 
         correctWords = data.words.sort(); 
         currentClue = data.clue;
         
         players.forEach(pId => {
             if (pId !== currentDrawerId) {
-                // فلترة الكلمات الصحيحة من قائمة المضللين
                 const filteredWords = allWords.filter(w => !correctWords.includes(w));
                 const playerWords = filteredWords.sort(() => 0.5 - Math.random()).slice(0, 12);
                 const pSocketId = Object.keys(socketToUserId).find(k => socketToUserId[k] === pId);
@@ -103,8 +113,6 @@ io.on('connection', (socket) => {
         const uId = socketToUserId[socket.id];
         const sortedWords = words.sort();
         if (uId === currentDrawerId || fakeWords[uId] || gameState !== "FAKING") return;
-        
-        // منع التضليل المتطابق مع الكلمات الصحيحة
         if (JSON.stringify(sortedWords) === JSON.stringify(correctWords)) return;
 
         fakeWords[uId] = sortedWords;
@@ -117,9 +125,7 @@ io.on('connection', (socket) => {
         let options = [];
         options.push(correctWords);
         for (let id in fakeWords) options.push(fakeWords[id]);
-        
         let uniqueOptions = Array.from(new Set(options.map(JSON.stringify)), JSON.parse).sort(() => 0.5 - Math.random());
-        
         io.emit('startVoting', { options: uniqueOptions, drawerId: currentDrawerId });
         startTimer(60, () => finalizeRound());
     }
@@ -171,10 +177,7 @@ io.on('connection', (socket) => {
         if (uId) {
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
-                // معالجة خروج المشفر
-                if (uId === currentDrawerId && (gameState === "DRAWING" || gameState === "FAKING" || gameState === "VOTING")) {
-                    startNewRound();
-                }
+                if (uId === currentDrawerId && (gameState === "DRAWING" || gameState === "FAKING")) startNewRound();
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 delete playerNames[uId]; delete scores[uId];
                 emitPlayerList();
