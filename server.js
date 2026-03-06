@@ -6,7 +6,16 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const allWords = ["نسر", "غراب", "بطارية", "سفاح", "ساطور", "نووي", "بلح", "زعتر", "شجرة", "مربع", "ستوديو", "عش", "حديد", "تكييف", "دماغ", "ضوضاء", "دخان", "قرص", "مايك", "حذاء", "طماطم", "سفنجة", "تصحيح", "سلاح", "اذاعة", "كيكة", "درع", "محتوى", "سوداوية", "عدمية", "هرجلة", "ايمان", "علاج", "تشفير", "كاسورة", "سيخ", "كديس", "كلب", "زريبة", "راية", "فيل", "مخرج", "احلام", "كهرباء", "الخلا", "ذهب", "اسفلت", "العالم", "السبيل", "نار", "مركب", "خازوق", "شبكة"];
+const allWords = [
+    "نسر", "غراب", "بطارية", "سفاح", "ساطور", "نووي", "بلح", "زعتر", "شجرة", "مربع", 
+    "ستوديو", "عش", "حديد", "تكييف", "دماغ", "ضوضاء", "دخان", "قرص", "مايك", "حذاء", 
+    "طماطم", "سفنجة", "تصحيح", "سلاح", "اذاعة", "كيكة", "درع", "محتوى", "سوداوية", 
+    "عدمية", "هرجلة", "ايمان", "علاج", "تشفير", "كاسورة", "سيخ", "كديس", "كلب", 
+    "زريبة", "راية", "فيل", "مخرج", "احلام", "كهرباء", "الخلا", "ذهب", "اسفلت", 
+    "العالم", "السبيل", "نار", "مركب", "خازوق", "شبكة", "مسدس", "عربية", "خفاش", 
+    "سفينة", "شتاء", "صيف", "مشوار", "قمر", "ضل", "اخضر", "صينية", "وسط", "زميل", 
+    "كباية", "حلة", "فارغ", "عالي", "مسامح", "وعي", "ضباب", "ادبي", "مثقف", "علمي", "رطوبة"
+];
 
 let players = [], scores = {}, playerNames = {}, hostId = null;
 let currentRound = 0, totalRounds = 0, correctWords = [], currentDrawerId = null;
@@ -74,11 +83,15 @@ io.on('connection', (socket) => {
 
     socket.on('submitClue', (data) => {
         if (socketToUserId[socket.id] !== currentDrawerId || !data.clue || !data.clue.trim()) return;
-        gameState = "FAKING"; correctWords = data.words.sort(); currentClue = data.clue;
+        gameState = "FAKING"; 
+        correctWords = data.words.sort(); 
+        currentClue = data.clue;
         
         players.forEach(pId => {
             if (pId !== currentDrawerId) {
-                const playerWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 12);
+                // فلترة الكلمات الصحيحة من قائمة المضللين
+                const filteredWords = allWords.filter(w => !correctWords.includes(w));
+                const playerWords = filteredWords.sort(() => 0.5 - Math.random()).slice(0, 12);
                 const pSocketId = Object.keys(socketToUserId).find(k => socketToUserId[k] === pId);
                 if (pSocketId) io.to(pSocketId).emit('showClue', { clue: currentClue, pWords: playerWords, drawerName: playerNames[currentDrawerId] });
             }
@@ -88,8 +101,13 @@ io.on('connection', (socket) => {
 
     socket.on('submitFake', (words) => {
         const uId = socketToUserId[socket.id];
+        const sortedWords = words.sort();
         if (uId === currentDrawerId || fakeWords[uId] || gameState !== "FAKING") return;
-        fakeWords[uId] = words.sort();
+        
+        // منع التضليل المتطابق مع الكلمات الصحيحة
+        if (JSON.stringify(sortedWords) === JSON.stringify(correctWords)) return;
+
+        fakeWords[uId] = sortedWords;
         guessesReceived++;
         if (guessesReceived >= (players.length - 1)) proceedToVoting();
     });
@@ -97,10 +115,9 @@ io.on('connection', (socket) => {
     function proceedToVoting() {
         gameState = "VOTING"; guessesReceived = 0;
         let options = [];
-        options.push(correctWords); // الزوج الصحيح
-        for (let id in fakeWords) options.push(fakeWords[id]); // أزواج التضليل
+        options.push(correctWords);
+        for (let id in fakeWords) options.push(fakeWords[id]);
         
-        // إزالة التكرار وخلط الترتيب
         let uniqueOptions = Array.from(new Set(options.map(JSON.stringify)), JSON.parse).sort(() => 0.5 - Math.random());
         
         io.emit('startVoting', { options: uniqueOptions, drawerId: currentDrawerId });
@@ -127,7 +144,7 @@ io.on('connection', (socket) => {
         setTimeout(() => {
             if (currentRound < totalRounds && players.length > 0) { currentRound++; startNewRound(); } 
             else { finishGame(); }
-        }, 10000); 
+        }, 8000); 
     }
 
     function calculateScores() {
@@ -154,6 +171,10 @@ io.on('connection', (socket) => {
         if (uId) {
             disconnectTimeouts[uId] = setTimeout(() => {
                 players = players.filter(id => id !== uId);
+                // معالجة خروج المشفر
+                if (uId === currentDrawerId && (gameState === "DRAWING" || gameState === "FAKING" || gameState === "VOTING")) {
+                    startNewRound();
+                }
                 if (uId === hostId) hostId = players.length > 0 ? players[0] : null;
                 delete playerNames[uId]; delete scores[uId];
                 emitPlayerList();
@@ -165,4 +186,3 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server Online on port ${PORT}`));
-
