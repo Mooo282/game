@@ -6,101 +6,92 @@
     <title>الرابط العجيب </title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root {
-            --bg: #0a0a0c; --card-bg: #16161e; --primary: #6366f1;
-            --accent: #f59e0b; --success: #10b981; --error: #ef4444; --text: #f8fafc;
-        }
-        body { 
-            font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); 
-            background-image: radial-gradient(circle at top right, #1e1e2e, #0a0a0c);
-            color: var(--text); margin: 0; padding: 10px; min-height: 100vh;
-        }
-        .main-wrapper { display: flex; max-width: 1200px; margin: 20px auto; gap: 20px; flex-wrap: wrap; }
-        .game-box { flex: 2; min-width: 320px; background: var(--card-bg); padding: 25px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-        
-        
-        #player-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 20px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 15px; }
-        .p-tag { background: #1e1e26; padding: 6px 12px; border-radius: 10px; border: 1px solid #2d2d3d; display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        :root { --bg: #0a0a0c; --card-bg: #16161e; --primary: #6366f1; --accent: #f59e0b; --chaos: #ef4444; --text: #f8fafc; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 10px; transition: 0.5s; }
+        body.chaos-mode { background: radial-gradient(circle at top right, #450a0a, #0a0a0c); }
+        .main-wrapper { display: flex; max-width: 1200px; margin: 15px auto; gap: 20px; flex-wrap: wrap; }
+        .game-box { flex: 2; min-width: 320px; background: var(--card-bg); padding: 25px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); position: relative; }
+        .chaos-tag { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--chaos); color: white; padding: 4px 15px; border-radius: 20px; font-weight: 900; box-shadow: 0 0 15px var(--chaos); font-size: 0.8em; }
+        #player-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 20px; }
+        .p-tag { background: #1e1e26; padding: 6px 12px; border-radius: 10px; border: 1px solid #2d2d3d; display: flex; align-items: center; gap: 8px; transition: 0.3s; }
+        .p-tag.offline { opacity: 0.3; filter: grayscale(1); }
         .p-score { background: var(--primary); color: white; padding: 1px 7px; border-radius: 6px; font-weight: bold; }
-
-        
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 20px 0; }
-        .card { padding: 18px; border: 2px solid #2d2d3d; border-radius: 14px; cursor: pointer; background: #1c1c24; transition: 0.2s; font-weight: bold; text-align: center; }
-        .card:hover { transform: translateY(-3px); background: #23232e; }
-        .selected { border-color: var(--accent) !important; color: var(--accent); background: rgba(245,158,11,0.05); }
-        .correct-answer { border-color: var(--success) !important; box-shadow: 0 0 15px var(--success); }
-
-        
-        #chat-box { flex: 1; min-width: 300px; height: 600px; background: var(--card-bg); border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; overflow: hidden; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 20px 0; }
+        .card { padding: 15px; border: 2px solid #2d2d3d; border-radius: 12px; cursor: pointer; background: #1c1c24; text-align: center; font-weight: bold; transition: 0.2s; }
+        .selected { border-color: var(--accent) !important; color: var(--accent); }
+        .chaos-mode .selected { border-color: var(--chaos) !important; color: var(--chaos); }
+        .correct-answer { border-color: #10b981 !important; box-shadow: 0 0 15px #10b981; }
+        #chat-box { flex: 1; min-width: 300px; height: 580px; background: var(--card-bg); border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; overflow: hidden; }
         #chat-messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; }
-        .msg { background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 10px; font-size: 0.85em; border-right: 3px solid var(--primary); text-align: right; }
-        .msg b { display: block; color: var(--primary); font-size: 0.8em; }
-        #chat-input-area { padding: 15px; background: rgba(0,0,0,0.2); display: flex; gap: 5px; }
-
-       
-        #timer { font-size: 3em; color: var(--error); font-weight: 900; }
-        #clue-display { font-size: 1.6em; color: var(--accent); margin: 15px 0; font-weight: bold; }
-        input[type="text"], select { padding: 12px; background: #0a0a0c; color: #fff; border: 1px solid #333; border-radius: 10px; outline: none; }
-        button { background: linear-gradient(135deg, var(--primary), #4f46e5); color: white; border: none; padding: 12px 25px; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { opacity: 0.9; transform: scale(1.02); }
+        .msg { background: rgba(255,255,255,0.03); padding: 8px; border-radius: 10px; font-size: 0.85em; text-align: right; border-right: 3px solid var(--primary); }
+        input, select { padding: 10px; background: #0a0a0c; color: #fff; border: 1px solid #333; border-radius: 8px; }
+        button { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .chaos-mode button { background: var(--chaos); }
         .hidden { display: none !important; }
-        #leaderboard-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; display:flex; align-items:center; justify-content:center; }
     </style>
 </head>
 <body>
 
 <div class="main-wrapper">
     <div class="game-box">
+        <div id="chaos-indicator" class="chaos-tag hidden">جولة مجنونة: اختر 3 كلمات X2</div>
         <div id="player-bar" class="hidden"></div>
-
         <div id="name-screen">
-            <h1 style="background: linear-gradient(to right, #6366f1, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.8em; margin-bottom: 0.2em;">الرابط العجيب</h1>
-            <p style="color: #777;">تحدى أصدقاءك في اكتشاف الروابط الخفية</p><br>
-            <input type="text" id="nick" placeholder="اكتب اسمك المستعار..." maxlength="12">
-            <br><br><button onclick="join()">ابدأ اللعب</button>
+            <h1>الرابط العجيب 🔥</h1>
+            <input type="text" id="nick" placeholder="اسمك المستعار...">
+            <button onclick="join()">دخول</button>
         </div>
 
         <div id="lobby-screen" class="hidden">
             <div id="host-controls" class="hidden">
-                <label>عدد الجولات:</label>
-                <select id="rounds-count"><option value="5">5 جولات</option><option value="10">10 جولات</option></select>
-                <br><br><button onclick="startGame()">ابدأ الجولة الأولى 🚀</button>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 15px; border: 1px solid #333;">
+                    <label>نمط اللعب:</label>
+                    <select id="game-mode" onchange="toggleMode()">
+                        <option value="ROUNDS">جولات ثابتة</option>
+                        <option value="POINTS">سباق نقاط</option>
+                    </select>
+                    <br><br>
+                    <div id="rounds-div">
+                        <label>عدد الجولات:</label>
+                        <select id="rounds-count"><option value="5">5</option><option value="10">10</option><option value="20">20</option></select>
+                    </div>
+                    <div id="points-div" class="hidden">
+                        <label>نقاط الفوز:</label>
+                        <select id="win-points"><option value="50">50</option><option value="100">100</option><option value="150">150</option></select>
+                    </div>
+                </div>
+                <br><button onclick="startGame()">ابدأ اللعبة 🚀</button>
             </div>
-            <p id="wait-msg">بانتظار المضيف لبدء اللعبة...</p>
+            <p id="wait-msg">بانتظار المضيف...</p>
         </div>
 
         <div id="game-screen" class="hidden">
-            <div id="timer">60</div>
-            <div id="clue-display"></div>
+            <div id="game-info" style="color: var(--accent); font-weight: bold; margin-bottom: 5px;"></div>
+            <div id="timer" style="font-size: 2.5em; color: var(--chaos); font-weight: 900;">60</div>
+            <div id="clue-display" style="font-size: 1.5em; margin: 15px 0;"></div>
             <div class="grid" id="grid"></div>
             <div id="controls">
-                <div id="draw-ctrl" class="hidden">
-                    <input type="text" id="clue-in" placeholder="اكتب الرابط هنا..." style="width:70%"><br><br>
-                    <button onclick="sendAction('submitClue')">إرسال الكلمة</button>
-                </div>
-                <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')" style="background:var(--accent)">تأكيد التضليل (اختر 2)</button></div>
-                <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')" style="background:var(--success)">تأكيد التصويت</button></div>
+                <div id="draw-ctrl" class="hidden"><input type="text" id="clue-in" placeholder="اكتب الرابط..."><button onclick="sendAction('submitClue')">إرسال</button></div>
+                <div id="fake-ctrl" class="hidden"><button onclick="sendAction('submitFake')">تأكيد التضليل</button></div>
+                <div id="vote-ctrl" class="hidden"><button onclick="sendAction('submitVote')">تصويت</button></div>
             </div>
-            <div id="status-msg" style="margin-top:15px; color:#888"></div>
             <div id="vote-details-container"></div>
         </div>
     </div>
-
+    
     <div id="chat-box" class="hidden">
-        <div style="padding:15px; background:rgba(255,255,255,0.02); border-bottom:1px solid #333; font-weight:bold;">الدردشة 💬</div>
         <div id="chat-messages"></div>
-        <div id="chat-input-area">
-            <input type="text" id="chat-in" placeholder="اكتب..." onkeypress="if(event.key==='Enter') sendChat()">
+        <div style="padding: 10px; display: flex; gap: 5px;">
+            <input type="text" id="chat-in" placeholder="رسالة..." onkeypress="if(event.key==='Enter') sendChat()">
             <button onclick="sendChat()">ارسل</button>
         </div>
     </div>
 </div>
 
-<div id="leaderboard-overlay" class="hidden">
-    <div class="game-box" style="width:300px; text-align:center;">
-        <h2 style="color:var(--accent)">النتائج النهائية 🏆</h2>
-        <div id="final-list" style="margin:20px 0;"></div>
-        <button onclick="location.reload()">لعبة جديدة</button>
+<div id="leaderboard-overlay" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); display:flex; align-items:center; justify-content:center; z-index:1000;">
+    <div class="game-box" style="width:300px; text-align:center; border: 2px solid var(--chaos);">
+        <h2 style="color:var(--chaos)">كأس الرابط 🏆</h2>
+        <div id="final-list"></div><br><button onclick="location.reload()">لعبة جديدة</button>
     </div>
 </div>
 
@@ -108,7 +99,13 @@
     let myId = localStorage.getItem('game_user_id') || ('u_' + Math.random().toString(36).substr(2, 9));
     localStorage.setItem('game_user_id', myId);
     const socket = io();
-    let currentDrawerId = null, selected = [], currentGameState = "LOBBY";
+    let currentDrawerId = null, selected = [], currentRound = 0, isChaosRound = false;
+
+    function toggleMode() {
+        const mode = document.getElementById('game-mode').value;
+        document.getElementById('rounds-div').classList.toggle('hidden', mode !== 'ROUNDS');
+        document.getElementById('points-div').classList.toggle('hidden', mode !== 'POINTS');
+    }
 
     function join() {
         const n = document.getElementById('nick').value; if(!n) return;
@@ -121,13 +118,13 @@
     }
 
     window.onload = () => { if(localStorage.getItem('game_user_name')) { document.getElementById('nick').value = localStorage.getItem('game_user_name'); join(); } };
-    function startGame() { socket.emit('requestStart', { rounds: document.getElementById('rounds-count').value }); }
+    function startGame() { socket.emit('requestStart', { mode: document.getElementById('game-mode').value, rounds: document.getElementById('rounds-count').value, points: document.getElementById('win-points').value }); }
     function sendChat() { const i = document.getElementById('chat-in'); if(i.value) { socket.emit('sendChat', i.value); i.value = ""; } }
 
     socket.on('newChat', d => {
         const c = document.getElementById('chat-messages');
-        const m = document.createElement('div'); m.className = 'msg'; m.style.borderRightColor = d.color;
-        m.innerHTML = `<b style="color:${d.color}">${d.sender}</b>${d.text}`;
+        const m = document.createElement('div'); m.className = 'msg';
+        m.innerHTML = `<b style="color:${d.color}">${d.sender}:</b> ${d.text}`;
         c.appendChild(m); c.scrollTop = c.scrollHeight;
     });
 
@@ -135,36 +132,46 @@
         const bar = document.getElementById('player-bar'); bar.innerHTML = "";
         if(myId === d.hostId && d.gameState === "LOBBY") document.getElementById('host-controls').classList.remove('hidden');
         d.players.forEach(id => {
-            const tag = document.createElement('div'); tag.className = 'p-tag';
-            tag.innerHTML = `<span>${d.playerNames[id]}${id === d.hostId ? " 👑" : ""}</span><span class="p-score">${d.scores[id]||0}</span>`;
+            const isOnline = d.onlinePlayers.includes(id);
+            const tag = document.createElement('div'); tag.className = `p-tag ${isOnline ? '' : 'offline'}`;
+            tag.innerHTML = `<span>${d.playerNames[id]}</span><span class="p-score">${d.scores[id]||0}</span>`;
             bar.appendChild(tag);
         });
     });
 
-    socket.on('timerUpdate', t => document.getElementById('timer').innerText = t);
-
     socket.on('roundStarted', d => {
-        currentDrawerId = d.drawerId; selected = [];
-        document.getElementById('vote-details-container').innerHTML = "";
+        currentRound = d.currentRound; currentDrawerId = d.drawerId; selected = [];
+        isChaosRound = d.isChaos;
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
-        document.getElementById('clue-display').innerText = (myId === d.drawerId) ? "اختر كلمتين واكتب الرابط" : `بانتظار ${d.drawerName}...`;
+        
+        if(isChaosRound) {
+            document.body.classList.add('chaos-mode');
+            document.getElementById('chaos-indicator').classList.remove('hidden');
+        } else {
+            document.body.classList.remove('chaos-mode');
+            document.getElementById('chaos-indicator').classList.add('hidden');
+        }
+
+        const info = d.gameMode === "ROUNDS" ? `الجولة: ${d.currentRound} / ${d.totalRounds}` : `الهدف: ${d.targetScore} نقطة`;
+        document.getElementById('game-info').innerText = info;
+        const limit = isChaosRound ? 3 : 2;
+        document.getElementById('clue-display').innerText = (myId === d.drawerId) ? `اختر ${limit} كلمات واكتب الرابط` : `بانتظار المشفر...`;
         document.getElementById('draw-ctrl').className = (myId === d.drawerId) ? "" : "hidden";
         render(d.words, (myId !== d.drawerId));
     });
 
+    socket.on('timerUpdate', t => document.getElementById('timer').innerText = t);
+
     socket.on('showClue', d => {
         selected = [];
-        document.getElementById('clue-display').innerHTML = `<small style="font-size:0.5em; color:#888;">المشفر: ${d.drawerName}</small><br>الرابط: ${d.clue}`;
-        if(myId !== currentDrawerId) {
-            document.getElementById('fake-ctrl').classList.remove('hidden');
-            render(d.pWords, false);
-        }
+        document.getElementById('clue-display').innerHTML = `<small>المشفر: ${d.drawerName}</small><br>الرابط: ${d.clue}`;
+        if(myId !== currentDrawerId) { document.getElementById('fake-ctrl').classList.remove('hidden'); render(d.pWords, false); }
     });
 
     socket.on('startVoting', d => {
         selected = []; document.getElementById('fake-ctrl').classList.add('hidden');
-        document.getElementById('clue-display').innerText = (myId === d.drawerId) ? "اللاعبون يصوتون..." : "صوّت للزوج الصحيح!";
+        document.getElementById('clue-display').innerText = (myId === d.drawerId) ? "اللاعبون يصوتون..." : "اختر الإجابة الصحيحة!";
         if(myId !== d.drawerId) document.getElementById('vote-ctrl').classList.remove('hidden');
         const grid = document.getElementById('grid'); grid.innerHTML = "";
         d.options.forEach(pair => {
@@ -177,42 +184,40 @@
     socket.on('roundFinished', d => {
         document.getElementById('vote-ctrl').classList.add('hidden');
         document.querySelectorAll('.card').forEach(c => { if(c.innerText === d.correctWords.join(" + ")) c.classList.add('correct-answer'); });
-        let html = ''; for (let choice in d.voteDetails) html += `<div class="vote-info"><b>[${choice}]</b>: ${d.voteDetails[choice].join(", ")}</div>`;
+        let html = ''; for (let choice in d.voteDetails) html += `<div class="msg" style="margin-top:5px;"><b>[${choice}]</b>: ${d.voteDetails[choice].join(", ")}</div>`;
         document.getElementById('vote-details-container').innerHTML = html;
     });
 
     socket.on('gameOver', d => {
         document.getElementById('leaderboard-overlay').classList.remove('hidden');
         const list = document.getElementById('final-list'); list.innerHTML = "";
-        d.leaderboard.forEach((p, i) => list.innerHTML += `<div style="padding:8px; border-bottom:1px solid #333;">${i+1}. ${p.name}: ${p.score}</div>`);
+        d.leaderboard.forEach((p, i) => list.innerHTML += `<div>${i+1}. ${p.name}: <b>${p.score}</b></div>`);
     });
 
     function render(words, disabled) {
+        const limit = isChaosRound ? 3 : 2;
         const grid = document.getElementById('grid'); grid.innerHTML = "";
         words.forEach(w => {
             const card = document.createElement('div'); card.className = 'card'; card.innerText = w;
             if(!disabled) card.onclick = () => {
                 if(card.classList.contains('selected')) { card.classList.remove('selected'); selected = selected.filter(s => s !== w); }
-                else if(selected.length < 2) { card.classList.add('selected'); selected.push(w); }
+                else if(selected.length < limit) { card.classList.add('selected'); selected.push(w); }
             };
             grid.appendChild(card);
         });
     }
 
     function sendAction(type) {
+        const limit = isChaosRound ? 3 : 2;
+        if(selected.length !== limit && type !== 'submitVote') return alert(`يجب اختيار ${limit} كلمات!`);
         if(type === 'submitClue') {
-            const clue = document.getElementById('clue-in').value;
-            if(selected.length !== 2 || !clue) return alert("اختر كلمتين واكتب رابطاً!");
+            const clue = document.getElementById('clue-in').value; if(!clue) return;
             socket.emit('submitClue', { words: selected, clue });
             document.getElementById('draw-ctrl').classList.add('hidden');
         } else if(type === 'submitFake') {
-            if(selected.length !== 2) return alert("اختر كلمتين!");
-            socket.emit('submitFake', selected);
-            document.getElementById('fake-ctrl').classList.add('hidden');
+            socket.emit('submitFake', selected); document.getElementById('fake-ctrl').classList.add('hidden');
         } else if(type === 'submitVote') {
-            if(selected.length !== 2) return alert("اختر زوجاً!");
-            socket.emit('submitVote', selected);
-            document.getElementById('vote-ctrl').classList.add('hidden');
+            socket.emit('submitVote', selected); document.getElementById('vote-ctrl').classList.add('hidden');
         }
     }
 </script>
