@@ -12,6 +12,19 @@ let rooms = {};
 
 app.get('/', (req, res) => res.sendFile(__dirname + '/index.html'));
 
+function emitPlayerList(roomId) {
+    const room = rooms[roomId];
+    if(room) {
+        io.to(roomId).emit('updatePlayerList', { 
+            players: room.players, 
+            playerNames: room.playerNames, 
+            hostId: room.hostId, 
+            scores: room.scores, // إرسال النقاط بشكل صريح
+            onlinePlayers: Array.from(room.onlinePlayers) 
+        });
+    }
+}
+
 io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         const { userId, name, roomId } = data;
@@ -32,11 +45,13 @@ io.on('connection', (socket) => {
         const room = rooms[roomId];
         room.playerNames[userId] = name;
         room.onlinePlayers.add(userId);
-        if (!room.players.includes(userId)) { room.players.push(userId); room.scores[userId] = 0; }
+        if (!room.players.includes(userId)) { 
+            room.players.push(userId); 
+            room.scores[userId] = 0; 
+        }
         
         emitPlayerList(roomId);
 
-        // استعادة الحالة عند الريفرش
         if (room.gameState !== "LOBBY") {
             socket.emit('roundStarted', { 
                 words: room.currentWords, drawerId: room.currentDrawerId, 
@@ -44,9 +59,6 @@ io.on('connection', (socket) => {
                 currentRound: room.currentRound, totalRounds: room.totalRounds,
                 gameMode: room.gameMode, targetScore: room.targetScore
             });
-            if (room.gameState === "FAKING" || room.gameState === "VOTING") {
-                socket.emit('showClue', { clue: room.currentClue, drawerName: room.playerNames[room.currentDrawerId], state: room.gameState });
-            }
         }
     });
 
@@ -64,6 +76,7 @@ io.on('connection', (socket) => {
 
     function startNewRound(roomId) {
         const room = rooms[roomId];
+        if(!room) return;
         room.gameState = "DRAWING"; room.guessesReceived = 0; room.fakeWords = {}; room.votes = {};
         if (room.drawerQueue.length === 0) room.drawerQueue = [...room.players].sort(() => 0.5 - Math.random());
         room.currentDrawerId = room.drawerQueue.shift();
@@ -75,6 +88,7 @@ io.on('connection', (socket) => {
             currentRound: room.currentRound, totalRounds: room.totalRounds,
             gameMode: room.gameMode, targetScore: room.targetScore
         });
+        emitPlayerList(roomId); // تحديث القائمة لتظهر النقاط الجديدة
     }
 
     socket.on('submitClue', (data) => {
@@ -86,7 +100,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitFake', (words) => {
         const room = rooms[socket.roomId];
-        if (!room || room.gameState !== "FAKING") return;
+        if (!room) return;
         room.fakeWords[socket.userId] = words.sort();
         room.guessesReceived++;
         if (room.guessesReceived >= (room.players.length - 1)) {
@@ -98,7 +112,7 @@ io.on('connection', (socket) => {
 
     socket.on('submitVote', (votedPair) => {
         const room = rooms[socket.roomId];
-        if (!room || room.gameState !== "VOTING") return;
+        if (!room) return;
         room.votes[socket.userId] = votedPair.sort();
         room.guessesReceived++;
         if (room.guessesReceived >= (room.players.length - 1)) finalizeRound(socket.roomId);
@@ -106,6 +120,7 @@ io.on('connection', (socket) => {
 
     function finalizeRound(roomId) {
         const room = rooms[roomId];
+        if(!room) return;
         room.players.forEach(vId => {
             if (vId === room.currentDrawerId) return;
             const vote = JSON.stringify(room.votes[vId]);
@@ -117,7 +132,10 @@ io.on('connection', (socket) => {
                 }
             }
         });
+        
+        emitPlayerList(roomId); // إرسال النقاط الجديدة فوراً بعد الحساب
         io.to(roomId).emit('roundFinished', { correctWords: room.correctWords, scores: room.scores });
+        
         setTimeout(() => { 
             const anyoneWon = room.gameMode === "POINTS" && room.players.some(id => room.scores[id] >= room.targetScore);
             const roundsOver = room.gameMode === "ROUNDS" && room.currentRound >= room.totalRounds;
@@ -126,13 +144,19 @@ io.on('connection', (socket) => {
         }, 6000);
     }
 
-    function emitPlayerList(roomId) {
-        const room = rooms[roomId];
-        if(room) io.to(roomId).emit('updatePlayerList', { players: room.players, playerNames: room.playerNames, hostId: room.hostId, scores: room.scores, onlinePlayers: Array.from(room.onlinePlayers) });
-    }
-
     socket.on('disconnect', () => {
-        if(rooms[socket.roomId]) { rooms[socket.roomId].onlinePlayers.delete(socket.userId); emitPlayerList(socket.roomId); }
+        const rId = socket.roomId;
+        const uId = socket.userId;
+        if(rooms[rId]) {
+            rooms[rId].onlinePlayers.delete(uId);
+            emitPlayerList(rId);
+            
+            // حذف الغرفة إذا لم يتبق أي لاعب أونلاين
+            if (rooms[rId].onlinePlayers.size === 0) {
+                console.log(`حذف الغرفة الفارغة: ${rId}`);
+                delete rooms[rId];
+            }
+        }
     });
 });
 
