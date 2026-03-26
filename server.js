@@ -24,13 +24,14 @@ io.on('connection', (socket) => {
                 players: [], scores: {}, playerNames: {}, hostId: userId,
                 gameState: "LOBBY", onlinePlayers: new Set(), drawerQueue: [],
                 currentRound: 0, totalRounds: 5, currentWords: [], currentClue: "", 
-                votes: {}, correctWords: [], guessesReceived: 0
+                votes: {}, correctWords: [], guessesReceived: 0, currentDrawerId: null
             };
         }
 
         const room = rooms[roomId];
         room.playerNames[userId] = name;
         room.onlinePlayers.add(userId);
+        
         if (!room.players.includes(userId)) {
             room.players.push(userId);
             room.scores[userId] = 0;
@@ -38,6 +39,18 @@ io.on('connection', (socket) => {
         if (!room.hostId || !room.players.includes(room.hostId)) room.hostId = userId;
 
         emitPlayerList(roomId);
+
+        // استعادة الحالة عند الريفرش
+        if (room.gameState !== "LOBBY") {
+            socket.emit('roundStarted', { 
+                words: room.currentWords, drawerId: room.currentDrawerId, 
+                drawerName: room.playerNames[room.currentDrawerId],
+                currentRound: room.currentRound, totalRounds: room.totalRounds
+            });
+            if (room.gameState === "VOTING") {
+                socket.emit('showClue', { clue: room.currentClue, drawerName: room.playerNames[room.currentDrawerId] });
+            }
+        }
     });
 
     socket.on('requestStart', (data) => {
@@ -55,8 +68,8 @@ io.on('connection', (socket) => {
         room.gameState = "DRAWING"; room.guessesReceived = 0; room.votes = {};
         if (room.drawerQueue.length === 0) room.drawerQueue = [...room.players].sort(() => 0.5 - Math.random());
         room.currentDrawerId = room.drawerQueue.shift();
-        
         room.currentWords = allWords.sort(() => 0.5 - Math.random()).slice(0, 15);
+        
         io.to(roomId).emit('roundStarted', { 
             words: room.currentWords, drawerId: room.currentDrawerId, 
             drawerName: room.playerNames[room.currentDrawerId],
@@ -110,6 +123,5 @@ io.on('connection', (socket) => {
     });
 });
 
-// التعديل الخاص بـ Render
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
